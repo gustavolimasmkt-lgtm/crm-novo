@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
+      DATABASE_URL: postgres://crm:crm@localhost:5432/crm_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @crm/web build
+      - name: E2E
+        run: |
+          pnpm --filter @crm/db migrate
+          MASTER_EMAIL=master@local.test MASTER_PASSWORD=Master12345 MASTER_NAME="Master CI" pnpm --filter @crm/core create-master
+          cd apps/web
+          npx playwright install --with-deps chromium
+          (APP_URL=http://localhost:3100 npx next start -p 3100 &) && sleep 5
+          npx playwright test

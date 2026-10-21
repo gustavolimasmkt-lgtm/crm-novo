@@ -1,0 +1,21 @@
+{
+  "name": "crm-novo",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "db:generate": "pnpm --filter @crm/db generate",
+    "db:migrate": "pnpm --filter @crm/db migrate",
+    "db:seed": "pnpm --filter @crm/db seed"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "turbo": "^2.11.10",
+    "typescript": "^5.9.3"
+  }
+}
