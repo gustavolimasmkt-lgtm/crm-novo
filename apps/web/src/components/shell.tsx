@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, ChevronsUpDown, Crown, Home, LogOut, Settings2, Users } from "lucide-react";
+import { Building2, ChevronsUpDown, Crown, Home, LogOut, Settings2, Smartphone, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
@@ -16,17 +16,22 @@ export function Shell({
   org,
   orgs,
   canSeeTeam,
+  canManageConnections,
 }: {
   children: ReactNode;
   user: { name: string; email: string; isMaster: boolean };
   org: Org;
   orgs: Org[];
   canSeeTeam: boolean;
+  canManageConnections: boolean;
 }) {
   const pathname = usePathname();
   const nav: NavItem[] = [
     { href: "/", label: "Início", icon: <Home size={20} /> },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
+    ...(canManageConnections
+      ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
+      : []),
     { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
     ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
   ];

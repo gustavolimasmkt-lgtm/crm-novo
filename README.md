@@ -41,3 +41,16 @@ cd apps/web && npx playwright test                       # ponta a ponta, comput
 - Variáveis: `DATABASE_URL`, `APP_URL`, `APP_NAME`, `SETUP_TOKEN` (só para o primeiro acesso), `RESEND_API_KEY` e `EMAIL_FROM` (opcional).
 - Primeiro acesso: abra `APP_URL/setup?token=<SETUP_TOKEN>` e crie a conta Master. Depois apague a variável `SETUP_TOKEN`.
 - Health check: `/api/health`.
+
+## WhatsApp (Evolution API)
+
+Variáveis no serviço web: `EVOLUTION_API_URL` e `EVOLUTION_API_KEY`. O CRM só opera instâncias com prefixo `crm_`
+(ver docs/decisoes/0002-evolution-compartilhada.md).
+
+Testes E2E usam uma Evolution falsa:
+
+```bash
+pnpm --filter @crm/core fake-evolution        # sobe em http://127.0.0.1:3199 (chave: chave-teste)
+cd apps/web && APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste npx next start -p 3100
+npx playwright test
+```

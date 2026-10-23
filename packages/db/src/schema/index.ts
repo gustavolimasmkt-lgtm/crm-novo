@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -166,7 +167,67 @@ export const loginAttempts = pgTable(
   (t) => [index("login_attempts_email_idx").on(t.email, t.createdAt)],
 );
 
-export const schemaVersion = 1 as const;
+/** Estado de uma conexão de WhatsApp (espelha a Evolution: open, connecting, close). */
+export const connectionStatusEnum = pgEnum("connection_status", ["pending", "connecting", "open", "close"]);
+
+/**
+ * Conexão de WhatsApp de uma empresa, via Evolution API (QR code).
+ * O CRM só opera instâncias registradas aqui (instance_name com prefixo próprio): a Evolution
+ * pode atender outros sistemas e as instâncias deles nunca são tocadas.
+ */
+export const whatsappConnections = pgTable(
+  "whatsapp_connections",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    instanceName: text("instance_name").notNull(),
+    status: connectionStatusEnum("status").notNull().default("pending"),
+    /** Desativada pelo CRM: não envia nem processa mensagens, mas a sessão na Evolution continua. */
+    active: boolean("active").notNull().default(true),
+    phone: text("phone"),
+    profileName: text("profile_name"),
+    /** Último QR code recebido (imagem base64), só enquanto aguarda leitura. */
+    qrCode: text("qr_code"),
+    qrUpdatedAt: timestamp("qr_updated_at", { withTimezone: true }),
+    /** SHA-256 do segredo que a Evolution envia no endereço do webhook. */
+    webhookTokenHash: text("webhook_token_hash").notNull(),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("whatsapp_connections_instance_uq").on(t.instanceName),
+    index("whatsapp_connections_org_idx").on(t.organizationId),
+  ],
+);
+
+/** Eventos recebidos da Evolution, guardados antes de processar (permite reprocessar). */
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    id: id(),
+    connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    payload: jsonb("payload").notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("webhook_events_pending_idx").on(t.processedAt, t.createdAt),
+    index("webhook_events_connection_idx").on(t.connectionId, t.createdAt),
+  ],
+);
+
+export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
+
+export const schemaVersion = 2 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

@@ -6,6 +6,7 @@ import { setOrgStatusAction } from "@/app/actions/team";
 import { Badge, GroupedList, PageHeader } from "@/components/ui";
 import { requireMaster } from "@/lib/session";
 import { CreateOrgForm } from "./create-org-form";
+import { LimitsForm } from "./limits-form";
 
 export const metadata = { title: "Master" };
 export const dynamic = "force-dynamic";
@@ -58,6 +59,12 @@ export default async function MasterPage() {
                   Entrar
                 </button>
               </form>
+              <LimitsForm
+                organizationId={o.id}
+                orgName={o.name}
+                whatsappConnections={o.limits.whatsappConnections}
+                aiCreditsMonthly={o.limits.aiCreditsMonthly}
+              />
               <form action={setOrgStatusAction}>
                 <input type="hidden" name="organizationId" value={o.id} />
                 <input type="hidden" name="status" value={o.status === "active" ? "suspended" : "active"} />

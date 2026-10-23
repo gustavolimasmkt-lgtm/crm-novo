@@ -38,5 +38,6 @@ jobs:
           MASTER_EMAIL=master@local.test MASTER_PASSWORD=Master12345 MASTER_NAME="Master CI" pnpm --filter @crm/core create-master
           cd apps/web
           npx playwright install --with-deps chromium
-          (APP_URL=http://localhost:3100 npx next start -p 3100 &) && sleep 5
+          (cd ../.. && pnpm --filter @crm/core fake-evolution &) && sleep 3
+          (APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste npx next start -p 3100 &) && sleep 5
           npx playwright test

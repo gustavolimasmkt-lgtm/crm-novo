@@ -5,7 +5,9 @@ export type ErrorCode =
   | "not_found"
   | "validation"
   | "conflict"
-  | "expired";
+  | "expired"
+  | "limit"
+  | "integration";
 
 /** Erro de regra de negócio com mensagem pronta para mostrar ao usuário. */
 export class AppError extends Error {

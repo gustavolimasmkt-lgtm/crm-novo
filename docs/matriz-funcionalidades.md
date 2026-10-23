@@ -8,7 +8,7 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F02 | Multiempresa, painel Master e troca de conta | 0 | Concluído | Integração + E2E (criar empresa, convite, troca de empresa, suspensão). |
 | F03 | Papéis e permissões | 0 | Concluído (proposta) | Unitário por papel + E2E vendedor sem acesso à Equipe. Matriz aguardando ajuste. |
 | F04 | Departamentos | 0 | Pendente | Tabela criada; telas entram junto com Conversas (Fase 1). |
-| F05 | Conexão WhatsApp por QR | 1 | Pendente |  |
+| F05 | Conexão WhatsApp por QR | 1 | Em validação | Tela Conexões (criar, QR, reconectar, desconectar, desativar, excluir), limite por empresa editável no Master, webhook com segredo por conexão. 13 testes de integração contra Evolution falsa (inclui prova de que a instância de outro sistema não é tocada) + E2E computador e celular. Falta: leitura real do QR em produção. |
 | F06 | Lista de conversas, nova conversa | 1 | Pendente |  |
 | F07 | Filtros avançados e condições | 1 | Pendente |  |
 | F08 | Enviar e receber mídias | 1 | Pendente |  |
