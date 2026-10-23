@@ -281,6 +281,9 @@ export const conversations = pgTable(
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
     lastMessagePreview: text("last_message_preview"),
     lastMessageFromMe: boolean("last_message_from_me"),
+    /** Agente de IA parado nesta conversa (humano assumiu ou transferência). */
+    aiPaused: boolean("ai_paused").notNull().default(false),
+    aiPausedReason: text("ai_paused_reason"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -329,6 +332,8 @@ export const messages = pgTable(
     error: text("error"),
     /** Quem do CRM enviou; nulo para recebidas e para enviadas direto do celular. */
     sentByUserId: uuid("sent_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Enviada pelo agente de IA. */
+    sentByAi: boolean("sent_by_ai").notNull().default(false),
     /** Mensagem original do WhatsApp (necessária para baixar a mídia depois). */
     raw: jsonb("raw"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
@@ -496,9 +501,64 @@ export const dealEvents = pgTable(
   (t) => [index("deal_events_deal_idx").on(t.dealId, t.createdAt)],
 );
 
+/** Agente de IA da empresa: responde no WhatsApp com base nas instruções. */
+export const aiAgents = pgTable(
+  "ai_agents",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(false),
+    /** Nula = atende todas as conexões da empresa. */
+    connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "set null" }),
+    model: text("model").notNull().default("claude-sonnet-5-5"),
+    instructions: text("instructions").notNull().default(""),
+    replyDelaySeconds: integer("reply_delay_seconds").notNull().default(15),
+    historyMessages: integer("history_messages").notNull().default(20),
+    handoffMessage: text("handoff_message"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("ai_agents_org_uq").on(t.organizationId)],
+);
+
+/** Resposta pendente do agente (uma por conversa; novas mensagens empurram o horário: agrupa rajadas). */
+export const aiJobs = pgTable("ai_jobs", {
+  conversationId: uuid("conversation_id")
+    .primaryKey()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  runAt: timestamp("run_at", { withTimezone: true }).notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: createdAt(),
+});
+
+/** Consumo de IA (tokens) para controle de créditos. */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_usage_org_created_idx").on(t.organizationId, t.createdAt)],
+);
+
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 5 as const;
+export const schemaVersion = 6 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

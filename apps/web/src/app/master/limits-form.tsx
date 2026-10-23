@@ -44,7 +44,7 @@ export function LimitsForm({
           className="h-9 w-28"
         />
       </Field>
-      <Field label="Créditos IA/mês">
+      <Field label="Créditos IA/mês (1 = 1.000 tokens)">
         <Input
           name="aiCreditsMonthly"
           type="number"

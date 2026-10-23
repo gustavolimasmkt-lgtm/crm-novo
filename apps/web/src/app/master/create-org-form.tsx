@@ -24,7 +24,7 @@ export function CreateOrgForm() {
           <Field label="Conexões WhatsApp">
             <Input name="whatsappConnections" type="number" min={0} max={50} defaultValue={1} />
           </Field>
-          <Field label="Créditos IA/mês">
+          <Field label="Créditos IA/mês" hint="1 crédito = 1.000 tokens">
             <Input name="aiCreditsMonthly" type="number" min={0} step={1000} defaultValue={50000} />
           </Field>
         </div>

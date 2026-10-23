@@ -6,7 +6,7 @@ export const db = createDb();
 
 export async function resetDb() {
   await db.execute(
-    sql`truncate table deal_events, deal_tags, deals, tags, deal_sources, pipeline_stages, pipelines, message_media, messages, conversations, contacts, webhook_events, whatsapp_connections, audit_log, login_attempts, invitations, sessions, department_members, departments, memberships, users, organizations restart identity cascade`,
+    sql`truncate table ai_usage, ai_jobs, ai_agents, deal_events, deal_tags, deals, tags, deal_sources, pipeline_stages, pipelines, message_media, messages, conversations, contacts, webhook_events, whatsapp_connections, audit_log, login_attempts, invitations, sessions, department_members, departments, memberships, users, organizations restart identity cascade`,
   );
 }
 

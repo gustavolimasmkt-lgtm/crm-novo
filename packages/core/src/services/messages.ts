@@ -10,6 +10,7 @@ import {
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { phoneVariants } from "../whatsapp/evolution.js";
 import { type ParsedMessage, parseMessage, parseStatus, previewOf } from "../whatsapp/parse.js";
+import { maybeEnqueueAi } from "./agent.js";
 import { autoCreateDeal } from "./crm.js";
 import { notifyOrg } from "./events.js";
 
@@ -127,7 +128,10 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     })
     .where(eq(conversations.id, conversation.id));
   // Lead novo entra sozinho no funil padrão.
-  if (!p.fromMe) await autoCreateDeal(db, c.organizationId, contact.id, c.id);
+  if (!p.fromMe) {
+    await autoCreateDeal(db, c.organizationId, contact.id, c.id);
+    await maybeEnqueueAi(db, c.organizationId, conversation.id, c.id);
+  }
   await notifyOrg(db, { o: c.organizationId, t: "message", c: conversation.id });
   return { conversationId: conversation.id, duplicate: false };
 }

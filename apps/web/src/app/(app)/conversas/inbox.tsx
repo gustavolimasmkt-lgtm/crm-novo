@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  Bot,
   Check,
   CheckCheck,
   ChevronLeft,
@@ -37,6 +38,8 @@ type Conv = {
   connectionPhone: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
+  aiPaused: boolean;
+  aiPausedReason: string | null;
 };
 type Msg = {
   id: string;
@@ -49,6 +52,7 @@ type Msg = {
   error: string | null;
   sentAt: string;
   sentByName: string | null;
+  sentByAi: boolean;
 };
 type Connection = { id: string; name: string; phone: string | null; status: string };
 type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
@@ -78,6 +82,7 @@ export function Inbox({
   me,
   canViewAll,
   canManageConnections,
+  agentActive,
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -86,6 +91,7 @@ export function Inbox({
   me: { id: string; name: string };
   canViewAll: boolean;
   canManageConnections: boolean;
+  agentActive: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
@@ -318,6 +324,7 @@ export function Inbox({
               me={me}
               people={people}
               canViewAll={canViewAll}
+              agentActive={agentActive}
               onBack={() => setSelected(null)}
               onChanged={() => {
                 loadThread(selected);
@@ -351,6 +358,7 @@ function Thread({
   me,
   people,
   canViewAll,
+  agentActive,
   onBack,
   onChanged,
 }: {
@@ -360,6 +368,7 @@ function Thread({
   me: { id: string; name: string };
   people: Person[];
   canViewAll: boolean;
+  agentActive: boolean;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -467,6 +476,30 @@ function Thread({
           <div className="flex-1 text-[15px] text-ink-3">{error ?? "Carregando…"}</div>
         )}
       </header>
+
+      {c && agentActive && (
+        <div
+          className={cx(
+            "flex items-center gap-2 border-b border-separator px-4 py-1.5 text-[13px]",
+            c.aiPaused ? "bg-fill text-ink-2" : "bg-accent-soft text-accent",
+          )}
+          data-testid="ai-bar"
+        >
+          <Bot size={15} />
+          <span className="min-w-0 flex-1 truncate">
+            {c.aiPaused
+              ? `IA pausada${c.aiPausedReason ? `: ${c.aiPausedReason}` : ""}`
+              : "IA respondendo esta conversa"}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 font-semibold underline"
+            onClick={() => act({ action: c.aiPaused ? "ai_on" : "ai_off" })}
+          >
+            {c.aiPaused ? "Religar IA" : "Pausar IA"}
+          </button>
+        </div>
+      )}
 
       {actionError && (
         <div className="px-4 pt-3">
@@ -588,7 +621,10 @@ function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
             out ? "text-white/75" : "text-ink-3",
           )}
         >
-          {out && m.sentByName && <span className="mr-1 truncate">{m.sentByName.split(" ")[0]}</span>}
+          {out && m.sentByAi && <span className="mr-1 font-semibold">IA</span>}
+          {out && !m.sentByAi && m.sentByName && (
+            <span className="mr-1 truncate">{m.sentByName.split(" ")[0]}</span>
+          )}
           <span>{messageTime(m.sentAt)}</span>
           {out && <StatusIcon s={m.status} />}
         </div>

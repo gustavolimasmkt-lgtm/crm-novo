@@ -1,4 +1,5 @@
 import {
+  aiJobs,
   auditLog,
   contacts,
   conversations,
@@ -53,6 +54,8 @@ export type ConversationListItem = {
   connectionPhone: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
+  aiPaused: boolean;
+  aiPausedReason: string | null;
 };
 
 const listColumns = {
@@ -71,6 +74,8 @@ const listColumns = {
   connectionPhone: whatsappConnections.phone,
   assignedUserId: conversations.assignedUserId,
   assignedUserName: users.name,
+  aiPaused: conversations.aiPaused,
+  aiPausedReason: conversations.aiPausedReason,
 };
 
 function baseQuery(db: Database) {
@@ -131,6 +136,7 @@ export type MessageItem = {
   error: string | null;
   sentAt: Date;
   sentByName: string | null;
+  sentByAi: boolean;
 };
 
 export async function listMessages(
@@ -153,6 +159,7 @@ export async function listMessages(
       error: messages.error,
       sentAt: messages.sentAt,
       sentByName: users.name,
+      sentByAi: messages.sentByAi,
     })
     .from(messages)
     .leftJoin(users, eq(users.id, messages.sentByUserId))
@@ -332,6 +339,12 @@ export async function sendMessage(
     .where(eq(conversations.id, conversationId));
   if (assign.assignedUserId)
     await syncDealAssignee(db, organizationId, conv.contactId, assign.assignedUserId);
+  // Atendente respondeu: a IA sai desta conversa até alguém religar.
+  await db
+    .update(conversations)
+    .set({ aiPaused: true, aiPausedReason: "Um atendente respondeu" })
+    .where(and(eq(conversations.id, conversationId), eq(conversations.aiPaused, false)));
+  await db.delete(aiJobs).where(eq(aiJobs.conversationId, conversationId));
   await notifyOrg(db, { o: organizationId, t: "message", c: conversationId });
 
   await deliver(db, evo, organizationId, msg.id, connection.instanceName, jidToTarget(contact.waJid), {
@@ -364,14 +377,25 @@ async function deliver(
         caption: m.text ?? undefined,
       });
     // O eco (send.message/messages.upsert) pode chegar antes desta resposta; se já gravou, une os dois.
-    const echo = await db.query.messages.findFirst({
-      where: and(eq(messages.externalId, r.externalId), sql`${messages.id} <> ${messageId}`),
-    });
-    if (echo) await db.delete(messages).where(eq(messages.id, echo.id));
-    await db
-      .update(messages)
-      .set({ externalId: r.externalId, status: "sent", error: null, raw: r.raw as object })
-      .where(eq(messages.id, messageId));
+    // Une com o eco numa transação; se o eco entrar no meio, tenta de novo.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .delete(messages)
+            .where(and(eq(messages.externalId, r.externalId), sql`${messages.id} <> ${messageId}`));
+          await tx
+            .update(messages)
+            .set({ externalId: r.externalId, status: "sent", error: null, raw: r.raw as object })
+            .where(eq(messages.id, messageId));
+        });
+        break;
+      } catch (err) {
+        const e2 = err as { message?: string; code?: string; cause?: { message?: string; code?: string } };
+        const info = `${e2.message ?? ""} ${e2.code ?? ""} ${e2.cause?.message ?? ""} ${e2.cause?.code ?? ""}`;
+        if (attempt === 2 || !/duplicate|unique|23505/i.test(info)) throw err;
+      }
+    }
   } catch (e) {
     const detail = e instanceof EvolutionError ? e.message : String((e as Error)?.message ?? e);
     console.error("[envio]", detail);
@@ -540,4 +564,53 @@ export async function renameContact(
   const clean = name.trim().slice(0, 80) || null;
   await db.update(contacts).set({ name: clean, updatedAt: new Date() }).where(eq(contacts.id, c.contactId));
   await notifyOrg(db, { o: organizationId, t: "conversation", c: conversationId });
+}
+
+/** Mensagem enviada pelo agente de IA (não assume a conversa nem pausa a IA). */
+export async function sendAiMessage(
+  db: Database,
+  evo: EvolutionApi,
+  organizationId: string,
+  conversationId: string,
+  text: string,
+) {
+  const conv = await db.query.conversations.findFirst({
+    where: and(eq(conversations.id, conversationId), eq(conversations.organizationId, organizationId)),
+  });
+  if (!conv) throw new AppError("not_found", "Conversa não encontrada.");
+  const connection = await db.query.whatsappConnections.findFirst({
+    where: eq(whatsappConnections.id, conv.connectionId),
+  });
+  const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, conv.contactId) });
+  if (!connection || !contact || !connection.active || connection.status !== "open")
+    throw new AppError("validation", "Conexão indisponível para a IA responder.");
+  const [msg] = await db
+    .insert(messages)
+    .values({
+      organizationId,
+      conversationId,
+      connectionId: connection.id,
+      direction: "out",
+      type: "text",
+      body: text,
+      status: "pending",
+      sentByAi: true,
+    })
+    .returning();
+  if (!msg) throw new Error("Falha ao gravar mensagem");
+  await db
+    .update(conversations)
+    .set({
+      lastMessageAt: msg.sentAt,
+      lastMessagePreview: previewOf("text", text),
+      lastMessageFromMe: true,
+      updatedAt: new Date(),
+    })
+    .where(eq(conversations.id, conversationId));
+  await notifyOrg(db, { o: organizationId, t: "message", c: conversationId });
+  await deliver(db, evo, organizationId, msg.id, connection.instanceName, jidToTarget(contact.waJid), {
+    type: "text",
+    text,
+  });
+  return msg.id;
 }

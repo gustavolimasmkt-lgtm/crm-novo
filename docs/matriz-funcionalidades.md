@@ -19,24 +19,24 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F13 | Sequências, respostas rápidas, ações rápidas (/), notas internas | 1 | Pendente |  |
 | F14 | Inteligência de Conversas | 1 | Pendente |  |
 | F15 | Contatos: CRUD, filtros, exportar | 1 | Concluído | Lista paginada com busca, novo, editar (telefone fixo), excluir com histórico, exportar e importar CSV (formato antigo e modelo) sem duplicar, com ou sem o 9. Integração + E2E; validado em produção com os 448 contatos (23/10/2026). |
-| F16 | Funis e estágios | 1 | Em validação | Vários funis, funil padrão (recebe leads automáticos), etapas com cor, ordem e tipo (andamento, agendamento, ganho, perdido); não exclui etapa/funil com negociações. Integração + E2E. |
-| F17 | Kanban, mover estágio, histórico | 1 | Em validação | Quadro por funil com contagem e soma por etapa, arrastar no computador, trocar etapa pelo painel no celular, tempo real, histórico (criação, etapa, responsável, valor, etiquetas, anotações). Integração + E2E. |
+| F16 | Funis e estágios | 1 | Concluído | Vários funis, funil padrão (recebe leads automáticos), etapas com cor, ordem e tipo (andamento, agendamento, ganho, perdido); não exclui etapa/funil com negociações. Integração + E2E. Validado em produção (23/10/2026). |
+| F17 | Kanban, mover estágio, histórico | 1 | Concluído | Quadro por funil com contagem e soma por etapa, arrastar no computador, trocar etapa pelo painel no celular, tempo real, histórico (criação, etapa, responsável, valor, etiquetas, anotações). Integração + E2E. Validado em produção (23/10/2026). |
 | F18 | Lista, paginação, exportar | 1 | Pendente |  |
 | F19 | Ações em massa | 1 | Pendente |  |
-| F20 | Nova negociação | 1 | Em validação | Por telefone (reaproveita o contato), título, valor, etapa, fonte e responsável; número sequencial por empresa. Lead automático no funil padrão para quem escreve pela primeira vez. Integração + E2E. |
+| F20 | Nova negociação | 1 | Concluído | Por telefone (reaproveita o contato), título, valor, etapa, fonte e responsável; número sequencial por empresa. Lead automático no funil padrão para quem escreve pela primeira vez. Integração + E2E. Validado em produção (23/10/2026). |
 | F21 | Detalhe: compras, atividades, produtos, score, campos | 1 | Parcial | Painel com contato, link para a conversa, etapa, responsável, valor, fonte, descrição, etiquetas, anotações e campos trazidos na importação. Compras, produtos, score e campos personalizados: pendentes. |
 | F22 | Tarefas, modelos, Minhas tarefas | 1 | Pendente |  |
 | F23 | Etiquetas, fontes, campos, produtos | 1 | Parcial | Etiquetas (cor, criar só admin/gestor) e fontes. Campos personalizados e produtos: pendentes. |
-| F24 | Importação CSV | 1 | Em validação | Contatos e negociações: export do sistema antigo e modelo (apenas_contato, criar_negociacao, recorrente, etiquetas, data de criação); cria funis, etapas, fontes e etiquetas que faltarem; reimportar o export não duplica; colunas sem campo próprio ficam guardadas na negociação. Integração + E2E. |
+| F24 | Importação CSV | 1 | Concluído | Contatos e negociações: export do sistema antigo e modelo (apenas_contato, criar_negociacao, recorrente, etiquetas, data de criação); cria funis, etapas, fontes e etiquetas que faltarem; reimportar o export não duplica; colunas sem campo próprio ficam guardadas na negociação. Integração + E2E. Validado em produção (23/10/2026). |
 | F25 | Rodízio de vendedores e aviso | 1 | Pendente |  |
-| F26 | Agente: prompt, etapas, FAQ, modelos, gerador | 1 | Pendente |  |
+| F26 | Agente: prompt, etapas, FAQ, modelos, gerador | 1 | Em validação | Agente por empresa: instruções, modelo (Haiku, Sonnet ou Opus 5.5), conexão, espera para agrupar mensagens, histórico, mensagem de transferência; importação do agente do sistema antigo. Ferramentas: transferir para humano, encerrar, mover etapa. Gerador e modelos prontos: pendentes. Integração + E2E. |
 | F27 | Agente: documentos (RAG) | 1 | Pendente |  |
 | F28 | Agente: catálogo | 1 | Pendente |  |
-| F29 | Agente: intervenção, exclusão, pausa | 1 | Pendente |  |
+| F29 | Agente: intervenção, exclusão, pausa | 1 | Em validação | IA pausa quando atendente responde (CRM ou celular, janela de 30 min), ao transferir ou encerrar; botão Pausar/Religar na conversa; mensagens da IA marcadas. Integração + E2E. |
 | F30 | Agente: notificações ao vendedor | 1 | Pendente |  |
 | F31 | Agente: sentimento, nota, ICP, resumo | 1 | Pendente |  |
-| F32 | Agente: simulador, logs, diagnóstico | 1 | Pendente |  |
-| F33 | Agente: créditos e economia | 1 | Pendente |  |
+| F32 | Agente: simulador, logs, diagnóstico | 1 | Parcial | Simulador com as instruções do formulário (mostra transferência, encerramento e mudança de etapa). Logs e diagnóstico: pendentes. |
+| F33 | Agente: créditos e economia | 1 | Em validação | Consumo por empresa (1 crédito = 1.000 tokens), limite mensal do Master, IA para ao esgotar; uso do mês na tela do agente. |
 | F34 | Follow-up, fila e anti-banimento | 1 | Pendente |  |
 | F35 | Mensagens agendadas e lotes | 1 | Pendente |  |
 | F36 | Agendamentos: calendário e lista | 1 | Pendente |  |

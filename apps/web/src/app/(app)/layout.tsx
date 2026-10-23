@@ -15,6 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       orgs={orgs.filter((o) => o.status === "active").map((o) => ({ id: o.id, name: o.name }))}
       canSeeTeam={can(ctx.actor, "members.view")}
       canManageConnections={can(ctx.actor, "connections.manage")}
+      canConfigure={can(ctx.actor, "settings.manage")}
     >
       {children}
     </Shell>

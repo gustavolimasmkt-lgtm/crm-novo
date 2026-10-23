@@ -50,8 +50,9 @@ Variáveis no serviço web: `EVOLUTION_API_URL` e `EVOLUTION_API_KEY`. O CRM só
 Testes E2E usam uma Evolution falsa:
 
 ```bash
-pnpm --filter @crm/core fake-evolution        # sobe em http://127.0.0.1:3199 (chave: chave-teste)
-cd apps/web && APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste npx next start -p 3100
+pnpm --filter @crm/core fake-evolution        # Evolution falsa em :3199 (chave: chave-teste) e IA falsa em :3198
+cd apps/web && APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste \
+  ANTHROPIC_API_KEY=teste ANTHROPIC_BASE_URL=http://127.0.0.1:3198 npx next start -p 3100
 npx playwright test
 ```
 
@@ -69,3 +70,11 @@ npx playwright test
 - Quem escreve pela primeira vez no WhatsApp vira negociação na primeira etapa do funil padrão
   (não recria se a pessoa já teve negociação ganha ou perdida).
 - Importar negociações (CRM → Importar) aceita o export do sistema antigo e o modelo; reimportar o export não duplica.
+
+## Agente de IA
+
+- Tela "Agente de IA" (admin/gestor): instruções, modelo, espera, histórico, simulador e importação do agente antigo.
+- Respostas agendadas em `ai_jobs` (agrupa mensagens em sequência) e enviadas por um timer de 3 s (`instrumentation.ts`).
+- Ferramentas da IA: transferir_para_humano, encerrar_atendimento e mover_etapa.
+- A IA pausa quando um atendente responde (pelo CRM ou pelo celular) e quando os créditos do mês acabam.
+- 1 crédito = 1.000 tokens; limite por empresa no painel Master.

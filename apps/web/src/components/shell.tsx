@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bot,
   Building2,
   ChevronsUpDown,
   Crown,
@@ -30,6 +31,7 @@ export function Shell({
   orgs,
   canSeeTeam,
   canManageConnections,
+  canConfigure,
 }: {
   children: ReactNode;
   user: { name: string; email: string; isMaster: boolean };
@@ -37,6 +39,7 @@ export function Shell({
   orgs: Org[];
   canSeeTeam: boolean;
   canManageConnections: boolean;
+  canConfigure: boolean;
 }) {
   const pathname = usePathname();
   const [more, setMore] = useState(false);
@@ -49,6 +52,7 @@ export function Shell({
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
       : []),
+    ...(canConfigure ? [{ href: "/agente", label: "Agente de IA", icon: <Bot size={20} /> }] : []),
     { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
     ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
   ];
