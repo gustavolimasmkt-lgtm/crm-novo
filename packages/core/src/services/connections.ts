@@ -13,6 +13,8 @@ import {
   jidToPhone,
 } from "../whatsapp/evolution.js";
 import { AppError } from "./errors.js";
+import { notifyOrg } from "./events.js";
+import { processEventRow } from "./messages.js";
 
 type ActorU = Actor & { userId: string };
 
@@ -360,6 +362,11 @@ export async function handleEvolutionWebhook(
         .update(webhookEvents)
         .set({ processedAt: new Date(), attempts: 1 })
         .where(eq(webhookEvents.id, ev.id));
+    await notifyOrg(db, { o: c.organizationId, t: "connection" });
+  } else if (ev) {
+    // Mensagens: processa já; se falhar, o evento fica pendente e o reprocessador tenta de novo.
+    const row = await db.query.webhookEvents.findFirst({ where: eq(webhookEvents.id, ev.id) });
+    if (row) await processEventRow(db, row);
   }
   return { status: 200, stored: true };
 }

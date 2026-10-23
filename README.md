@@ -54,3 +54,11 @@ pnpm --filter @crm/core fake-evolution        # sobe em http://127.0.0.1:3199 (c
 cd apps/web && APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste npx next start -p 3100
 npx playwright test
 ```
+
+## Conversas
+
+- Eventos da Evolution são gravados em `webhook_events` e processados na hora; se falharem, um reprocessador
+  (em `apps/web/src/instrumentation.ts`) tenta de novo a cada 30 s, até 5 vezes.
+- Tempo real: `pg_notify('crm_events')` + `/api/eventos` (Server-Sent Events).
+- Mídias ficam em `message_media` (limite 16 MB por arquivo).
+- Grupos e listas de transmissão são guardados como evento, mas não viram conversa.

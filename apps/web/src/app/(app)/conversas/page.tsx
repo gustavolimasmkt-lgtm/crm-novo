@@ -1,0 +1,29 @@
+import { can, listAssignableUsers, listConversations, listUsableConnections } from "@crm/core";
+import { getDb } from "@crm/db";
+import { requireOrg } from "@/lib/session";
+import { Inbox } from "./inbox";
+
+export const metadata = { title: "Conversas" };
+export const dynamic = "force-dynamic";
+
+export default async function ConversationsPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
+  const ctx = await requireOrg();
+  const db = getDb();
+  const [initial, connections, people] = await Promise.all([
+    listConversations(db, ctx.actor, ctx.organization.id, { filter: "open" }),
+    listUsableConnections(db, ctx.organization.id),
+    listAssignableUsers(db, ctx.organization.id),
+  ]);
+  const { c } = await searchParams;
+  return (
+    <Inbox
+      initial={JSON.parse(JSON.stringify(initial))}
+      initialSelected={c ?? null}
+      connections={connections}
+      people={people}
+      me={{ id: ctx.user.id, name: ctx.user.name }}
+      canViewAll={can(ctx.actor, "conversations.view_all")}
+      canManageConnections={can(ctx.actor, "connections.manage")}
+    />
+  );
+}

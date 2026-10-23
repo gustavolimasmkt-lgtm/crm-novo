@@ -8,14 +8,14 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F02 | Multiempresa, painel Master e troca de conta | 0 | Concluído | Integração + E2E (criar empresa, convite, troca de empresa, suspensão). |
 | F03 | Papéis e permissões | 0 | Concluído (proposta) | Unitário por papel + E2E vendedor sem acesso à Equipe. Matriz aguardando ajuste. |
 | F04 | Departamentos | 0 | Pendente | Tabela criada; telas entram junto com Conversas (Fase 1). |
-| F05 | Conexão WhatsApp por QR | 1 | Em validação | Tela Conexões (criar, QR, reconectar, desconectar, desativar, excluir), limite por empresa editável no Master, webhook com segredo por conexão. 13 testes de integração contra Evolution falsa (inclui prova de que a instância de outro sistema não é tocada) + E2E computador e celular. Falta: leitura real do QR em produção. |
-| F06 | Lista de conversas, nova conversa | 1 | Pendente |  |
+| F05 | Conexão WhatsApp por QR | 1 | Concluído | Tela Conexões (criar, QR, reconectar, desconectar, desativar, excluir), limite por empresa no Master, webhook com segredo por conexão. Integração + E2E; validado em produção com leitura real do QR (23/10/2026) e webhooks chegando da Evolution. |
+| F06 | Lista de conversas, nova conversa | 1 | Em validação | Lista em tempo real (SSE), filtros Abertas/Não lidas/Minhas/Fechadas/Todas, busca por nome ou número, nova conversa com checagem do número na Evolution e regra do 9º dígito. Integração + E2E. Falta: teste com WhatsApp real. |
 | F07 | Filtros avançados e condições | 1 | Pendente |  |
-| F08 | Enviar e receber mídias | 1 | Pendente |  |
+| F08 | Enviar e receber mídias | 1 | Em validação | Texto, imagem, vídeo, áudio (como arquivo) e documento nos dois sentidos; mídia baixada da Evolution uma vez e guardada; status enviado/entregue/lido; falha com "tentar de novo". Gravar áudio no navegador: pendente. |
 | F09 | Responder, editar, excluir mensagem | 1 | Pendente |  |
 | F10 | Transcrição de áudio | 1 | Pendente |  |
-| F11 | Posse da conversa | 1 | Pendente |  |
-| F12 | Painel do lead, fechar/reabrir | 1 | Pendente |  |
+| F11 | Posse da conversa | 1 | Em validação | Puxar para mim, atribuir (gestor/admin), responder conversa sem dono assume; vendedor/atendente veem as suas e as sem dono. Integração + E2E. |
+| F12 | Painel do lead, fechar/reabrir | 1 | Parcial | Fechar/reabrir feito (cliente escrevendo reabre). Painel do lead entra com o CRM de negociações. |
 | F13 | Sequências, respostas rápidas, ações rápidas (/), notas internas | 1 | Pendente |  |
 | F14 | Inteligência de Conversas | 1 | Pendente |  |
 | F15 | Contatos: CRUD, filtros, exportar | 1 | Pendente |  |

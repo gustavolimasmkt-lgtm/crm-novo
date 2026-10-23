@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -12,6 +13,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 const id = () => uuid("id").primaryKey().default(sql`gen_random_uuid()`);
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -225,9 +228,125 @@ export const webhookEvents = pgTable(
   ],
 );
 
+/** Contato da empresa (pessoa do outro lado do WhatsApp). */
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Identificador no WhatsApp (ex.: 5548999999999@s.whatsapp.net ou ...@lid). */
+    waJid: text("wa_jid").notNull(),
+    /** Só dígitos, quando conhecido. */
+    phone: text("phone"),
+    name: text("name"),
+    /** Nome que a pessoa usa no WhatsApp. */
+    pushName: text("push_name"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("contacts_org_jid_uq").on(t.organizationId, t.waJid),
+    index("contacts_org_phone_idx").on(t.organizationId, t.phone),
+  ],
+);
+
+export const conversationStatusEnum = pgEnum("conversation_status", ["open", "closed"]);
+
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => whatsappConnections.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    status: conversationStatusEnum("status").notNull().default("open"),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "set null" }),
+    unreadCount: integer("unread_count").notNull().default(0),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    lastMessagePreview: text("last_message_preview"),
+    lastMessageFromMe: boolean("last_message_from_me"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("conversations_conn_contact_uq").on(t.connectionId, t.contactId),
+    index("conversations_org_last_idx").on(t.organizationId, t.lastMessageAt),
+    index("conversations_assigned_idx").on(t.organizationId, t.assignedUserId),
+  ],
+);
+
+export const messageDirectionEnum = pgEnum("message_direction", ["in", "out"]);
+export const messageTypeEnum = pgEnum("message_type", [
+  "text",
+  "image",
+  "audio",
+  "video",
+  "document",
+  "sticker",
+  "location",
+  "contact",
+  "other",
+]);
+export const messageStatusEnum = pgEnum("message_status", ["pending", "sent", "delivered", "read", "failed"]);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => whatsappConnections.id, { onDelete: "cascade" }),
+    /** Id da mensagem no WhatsApp (key.id). Nulo só enquanto o envio não foi aceito. */
+    externalId: text("external_id"),
+    direction: messageDirectionEnum("direction").notNull(),
+    type: messageTypeEnum("type").notNull().default("text"),
+    body: text("body"),
+    mediaMime: text("media_mime"),
+    mediaName: text("media_name"),
+    status: messageStatusEnum("status").notNull().default("sent"),
+    error: text("error"),
+    /** Quem do CRM enviou; nulo para recebidas e para enviadas direto do celular. */
+    sentByUserId: uuid("sent_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Mensagem original do WhatsApp (necessária para baixar a mídia depois). */
+    raw: jsonb("raw"),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("messages_conn_external_uq").on(t.connectionId, t.externalId),
+    index("messages_conversation_idx").on(t.conversationId, t.sentAt),
+  ],
+);
+
+/** Arquivo de mídia de uma mensagem (guardado para não depender do WhatsApp depois). */
+export const messageMedia = pgTable("message_media", {
+  messageId: uuid("message_id")
+    .primaryKey()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  fileName: text("file_name"),
+  data: bytea("data").notNull(),
+  createdAt: createdAt(),
+});
+
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 2 as const;
+export const schemaVersion = 3 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -235,3 +354,6 @@ export const ROLE_LABELS: Record<Role, string> = {
   seller: "Vendedor",
   agent: "Atendente",
 };
+export type ConversationStatus = (typeof conversationStatusEnum.enumValues)[number];
+export type MessageType = (typeof messageTypeEnum.enumValues)[number];
+export type MessageStatus = (typeof messageStatusEnum.enumValues)[number];

@@ -223,7 +223,7 @@ describe("webhook da Evolution", () => {
     expect(await db.select().from(webhookEvents)).toHaveLength(0);
   });
 
-  it("aplica QR e conexão; guarda mensagens para processar depois", async () => {
+  it("aplica QR e conexão; guarda e processa mensagens", async () => {
     const { adminActor, org } = await setup();
     const c = await createConnection(db, evo, adminActor, org.id, { name: "Loja" }, BASE);
     const name = await instanceNameOf(c.id);
@@ -259,7 +259,7 @@ describe("webhook da Evolution", () => {
     expect(evs.map((e) => e.event)).toEqual(["qrcode.updated", "connection.update", "messages.upsert"]);
     expect(evs[0]?.processedAt).toBeInstanceOf(Date);
     expect(JSON.stringify(evs[0]?.payload)).not.toContain("NOVO");
-    expect(evs[2]?.processedAt).toBeNull();
+    expect(evs[2]?.processedAt).toBeInstanceOf(Date); // mensagens agora são processadas na hora
   });
 
   it("o fluxo real: a Evolution chama o webhook quando o celular lê o QR", async () => {

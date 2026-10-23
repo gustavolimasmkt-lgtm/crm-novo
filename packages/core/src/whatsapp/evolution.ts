@@ -36,7 +36,32 @@ export interface EvolutionApi {
   fetchInstance(instanceName: string): Promise<InstanceInfo | null>;
   logout(instanceName: string): Promise<void>;
   deleteInstance(instanceName: string): Promise<void>;
+  /** Confere se os números têm WhatsApp e devolve o jid correto (resolve o nono dígito). */
+  checkNumbers(
+    instanceName: string,
+    numbers: string[],
+  ): Promise<{ number: string; exists: boolean; jid: string | null }[]>;
+  sendText(instanceName: string, to: string, text: string): Promise<SentMessage>;
+  sendMedia(
+    instanceName: string,
+    to: string,
+    media: {
+      kind: "image" | "video" | "document";
+      mime: string;
+      base64: string;
+      fileName: string;
+      caption?: string;
+    },
+  ): Promise<SentMessage>;
+  sendAudio(instanceName: string, to: string, base64: string): Promise<SentMessage>;
+  /** Baixa a mídia de uma mensagem (a partir da mensagem original guardada). */
+  getMedia(
+    instanceName: string,
+    raw: unknown,
+  ): Promise<{ base64: string; mime: string | null; fileName: string | null }>;
 }
+
+export type SentMessage = { externalId: string; raw: unknown };
 
 export class EvolutionError extends Error {
   constructor(
@@ -198,7 +223,69 @@ export function createEvolutionClient(opts: {
       assertOwnedInstance(instanceName);
       await call("DELETE", `/instance/delete/${enc(instanceName)}`, undefined, true);
     },
+
+    async checkNumbers(instanceName, numbers) {
+      assertOwnedInstance(instanceName);
+      const r = await call("POST", `/chat/whatsappNumbers/${enc(instanceName)}`, { numbers });
+      const list = Array.isArray(r) ? r : [];
+      return list.map((i) => {
+        const o = i as Record<string, unknown>;
+        return {
+          number: String(o.number ?? ""),
+          exists: o.exists === true,
+          jid: typeof o.jid === "string" ? o.jid : null,
+        };
+      });
+    },
+
+    async sendText(instanceName, to, text) {
+      assertOwnedInstance(instanceName);
+      return sent(await call("POST", `/message/sendText/${enc(instanceName)}`, { number: to, text }));
+    },
+
+    async sendMedia(instanceName, to, m) {
+      assertOwnedInstance(instanceName);
+      return sent(
+        await call("POST", `/message/sendMedia/${enc(instanceName)}`, {
+          number: to,
+          mediatype: m.kind,
+          mimetype: m.mime,
+          media: m.base64,
+          fileName: m.fileName,
+          ...(m.caption ? { caption: m.caption } : {}),
+        }),
+      );
+    },
+
+    async sendAudio(instanceName, to, base64) {
+      assertOwnedInstance(instanceName);
+      return sent(
+        await call("POST", `/message/sendWhatsAppAudio/${enc(instanceName)}`, { number: to, audio: base64 }),
+      );
+    },
+
+    async getMedia(instanceName, raw) {
+      assertOwnedInstance(instanceName);
+      const r = (await call("POST", `/chat/getBase64FromMediaMessage/${enc(instanceName)}`, {
+        message: raw,
+        convertToMp4: false,
+      })) as Record<string, unknown> | null;
+      const base64 = typeof r?.base64 === "string" ? r.base64 : "";
+      if (!base64) throw new EvolutionError("Evolution não devolveu a mídia");
+      return {
+        base64: base64.replace(/^data:[^;]+;base64,/, ""),
+        mime: typeof r?.mimetype === "string" ? r.mimetype : null,
+        fileName: typeof r?.fileName === "string" ? r.fileName : null,
+      };
+    },
   };
+
+  function sent(r: unknown): SentMessage {
+    const key = (r as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined;
+    const id = typeof key?.id === "string" ? key.id : null;
+    if (!id) throw new EvolutionError("Evolution não confirmou o envio (sem id da mensagem)");
+    return { externalId: id, raw: r };
+  }
 }
 
 /** "554896229897@s.whatsapp.net" -> "554896229897" */
@@ -218,4 +305,28 @@ export function formatPhone(phone: string | null | undefined): string {
     return `(${ddd}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`;
   }
   return `+${d}`;
+}
+
+/** Monta o destino para a Evolution: número puro para @s.whatsapp.net, jid completo para outros (@lid). */
+export function jidToTarget(jid: string): string {
+  return jid.endsWith("@s.whatsapp.net") ? (jid.split("@")[0] ?? jid) : jid;
+}
+
+/**
+ * Normaliza número digitado. Brasileiro: põe 55 e, se for celular com 8 dígitos, o 9 na frente.
+ * Devolve só dígitos ou null se inválido.
+ */
+export function normalizePhoneInput(
+  input: string,
+  opts: { brazil?: boolean; landline?: boolean } = {},
+): string | null {
+  let d = input.replace(/\D/g, "").replace(/^0+/, "");
+  if (opts.brazil !== false) {
+    if (!(d.startsWith("55") && d.length >= 12)) d = `55${d}`;
+    const local = d.slice(4);
+    if (!opts.landline && local.length === 8 && /^[6-9]/.test(local)) d = `${d.slice(0, 4)}9${local}`;
+    if (d.length < 12 || d.length > 13) return null;
+    return d;
+  }
+  return d.length >= 8 && d.length <= 15 ? d : null;
 }

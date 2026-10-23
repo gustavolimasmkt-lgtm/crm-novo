@@ -21,6 +21,16 @@ export type FakeEvolution = {
   apiKey: string;
   instances: Map<string, Inst>;
   calls: { method: string; path: string }[];
+  sent: { instance: string; kind: string; to: string; body: Record<string, unknown> }[];
+  /** Números que "não têm WhatsApp" na checagem. */
+  withoutWhatsapp: Set<string>;
+  /** Faz o envio falhar com 500 enquanto true. */
+  failSends: boolean;
+  incoming(
+    name: string,
+    msg: { from: string; text?: string; id?: string; pushName?: string; image?: boolean; fromMe?: boolean },
+  ): Promise<string>;
+  ack(name: string, id: string, status: "DELIVERY_ACK" | "READ"): Promise<void>;
   scan(name: string, phone?: string, notify?: boolean): Promise<void>;
   close(): Promise<void>;
 };
@@ -54,6 +64,9 @@ export async function startFakeEvolution(
     qrCount: 0,
   });
   const calls: { method: string; path: string }[] = [];
+  const sent: FakeEvolution["sent"] = [];
+  const withoutWhatsapp = new Set<string>();
+  let seq = 0;
 
   async function notify(name: string, event: string, data: unknown) {
     const i = instances.get(name);
@@ -83,6 +96,27 @@ export async function startFakeEvolution(
       if (!latest) return send(404, { error: "nenhuma instância do CRM" });
       await api.scan(latest, "5548996743297", true);
       return send(200, { ok: true, instance: latest });
+    }
+    if (req.method === "POST" && path === "/__test/incoming") {
+      const b = ((await body(req)) ?? {}) as { text?: string; from?: string };
+      const latest = [...instances.entries()]
+        .filter(([n, i]) => n.startsWith("crm_") && i.state === "open")
+        .at(-1)?.[0];
+      if (!latest) return send(404, { error: "nenhuma instância conectada" });
+      const id = await api.incoming(latest, {
+        from: b.from ?? "5511988887777",
+        text: b.text ?? "Olá!",
+        pushName: "Cliente Teste",
+      });
+      return send(200, { ok: true, id });
+    }
+    if (req.method === "POST" && path === "/__test/ack-all") {
+      for (const s of sent)
+        await api.ack(s.instance, String((s.body as Record<string, unknown>).__id ?? ""), "READ");
+      return send(200, { ok: true });
+    }
+    if (req.method === "GET" && path === "/__test/sent") {
+      return send(200, sent);
     }
     if (req.method === "GET" && path === "/__test/state") {
       return send(200, Object.fromEntries(instances));
@@ -156,6 +190,42 @@ export async function startFakeEvolution(
       if (!instances.delete(name)) return send(404, { status: 404 });
       return send(200, { status: "SUCCESS" });
     }
+    name = m(/^\/chat\/whatsappNumbers\/(.+)$/);
+    if (req.method === "POST" && name) {
+      const b = (await body(req)) as { numbers?: string[] } | null;
+      return send(
+        200,
+        (b?.numbers ?? []).map((n) => ({
+          number: n,
+          exists: !withoutWhatsapp.has(n),
+          jid: withoutWhatsapp.has(n) ? null : `${n}@s.whatsapp.net`,
+        })),
+      );
+    }
+    const sendM = path.match(/^\/message\/(sendText|sendMedia|sendWhatsAppAudio)\/(.+)$/);
+    if (req.method === "POST" && sendM) {
+      const b = ((await body(req)) ?? {}) as Record<string, unknown>;
+      if (api.failSends) return send(500, { status: 500, error: "falha simulada" });
+      const inst = sendM[2] ?? "";
+      const id = `FAKE${++seq}`;
+      sent.push({ instance: inst, kind: sendM[1] ?? "", to: String(b.number), body: { ...b, __id: id } });
+      // Como a Evolution real, avisa o envio pelo webhook (eco).
+      const echo = {
+        key: { id, remoteJid: `${b.number}@s.whatsapp.net`, fromMe: true },
+        message:
+          sendM[1] === "sendText" ? { conversation: b.text } : { documentMessage: { fileName: b.fileName } },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      };
+      setTimeout(() => void notify(inst, "send.message", echo), 10);
+      return send(201, {
+        key: { id, remoteJid: `${b.number}@s.whatsapp.net`, fromMe: true },
+        status: "PENDING",
+      });
+    }
+    name = m(/^\/chat\/getBase64FromMediaMessage\/(.+)$/);
+    if (req.method === "POST" && name) {
+      return send(201, { base64: PNG_1PX, mimetype: "image/png", fileName: null });
+    }
     send(404, { status: 404, path });
   });
 
@@ -181,6 +251,26 @@ export async function startFakeEvolution(
           wuid: i.ownerJid,
           profileName: i.profileName,
         });
+    },
+    sent,
+    withoutWhatsapp,
+    failSends: false,
+    async incoming(name, msg) {
+      const id = msg.id ?? `IN${++seq}`;
+      const message = msg.image
+        ? { imageMessage: { mimetype: "image/jpeg", caption: msg.text ?? null } }
+        : { conversation: msg.text ?? "" };
+      await notify(name, "messages.upsert", {
+        key: { id, remoteJid: `${msg.from}@s.whatsapp.net`, fromMe: msg.fromMe === true },
+        pushName: msg.pushName ?? null,
+        message,
+        messageType: msg.image ? "imageMessage" : "conversation",
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      });
+      return id;
+    },
+    async ack(name, id, status) {
+      await notify(name, "messages.update", { keyId: id, status, fromMe: true });
     },
     close: () => new Promise((r) => server.close(() => r())),
   };

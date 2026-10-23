@@ -1,6 +1,16 @@
 "use client";
 
-import { Building2, ChevronsUpDown, Crown, Home, LogOut, Settings2, Smartphone, Users } from "lucide-react";
+import {
+  Building2,
+  ChevronsUpDown,
+  Crown,
+  Home,
+  LogOut,
+  MessageCircle,
+  Settings2,
+  Smartphone,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
@@ -28,6 +38,7 @@ export function Shell({
   const pathname = usePathname();
   const nav: NavItem[] = [
     { href: "/", label: "Início", icon: <Home size={20} /> },
+    { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} /> },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
