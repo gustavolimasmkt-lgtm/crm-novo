@@ -7,7 +7,8 @@ import {
   webhookEvents,
   type whatsappConnections,
 } from "@crm/db";
-import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { phoneVariants } from "../whatsapp/evolution.js";
 import { type ParsedMessage, parseMessage, parseStatus, previewOf } from "../whatsapp/parse.js";
 import { notifyOrg } from "./events.js";
 
@@ -21,8 +22,38 @@ export const MAX_EVENT_ATTEMPTS = 5;
 export async function upsertContactAndConversation(
   db: Database,
   c: Pick<Connection, "id" | "organizationId">,
-  p: { contactJid: string; phone: string | null; pushName?: string | null; fromMe: boolean },
+  p: {
+    contactJid: string;
+    phone: string | null;
+    pushName?: string | null;
+    fromMe: boolean;
+    verified?: boolean;
+  },
 ) {
+  const verified = p.verified !== false;
+  // Contato cadastrado à mão ou importado (jid provisório) com o mesmo número: assume o jid real.
+  if (verified && p.phone) {
+    const pending = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.organizationId, c.organizationId),
+          eq(contacts.waVerified, false),
+          inArray(contacts.phone, phoneVariants(p.phone)),
+        ),
+      )
+      .limit(1);
+    const taken = await db.query.contacts.findFirst({
+      where: and(eq(contacts.organizationId, c.organizationId), eq(contacts.waJid, p.contactJid)),
+    });
+    if (pending[0] && !taken) {
+      await db
+        .update(contacts)
+        .set({ waJid: p.contactJid, phone: p.phone, waVerified: true, updatedAt: new Date() })
+        .where(eq(contacts.id, pending[0].id));
+    }
+  }
   const [contact] = await db
     .insert(contacts)
     .values({
@@ -30,6 +61,7 @@ export async function upsertContactAndConversation(
       waJid: p.contactJid,
       phone: p.phone,
       pushName: p.fromMe ? null : (p.pushName ?? null),
+      waVerified: verified,
     })
     .onConflictDoUpdate({
       target: [contacts.organizationId, contacts.waJid],
@@ -37,6 +69,7 @@ export async function upsertContactAndConversation(
         // Só atualiza o nome do WhatsApp quando quem escreveu foi o contato.
         pushName: p.fromMe || !p.pushName ? sql`${contacts.pushName}` : p.pushName,
         phone: sql`coalesce(${contacts.phone}, ${p.phone})`,
+        waVerified: verified ? true : sql`${contacts.waVerified}`,
         updatedAt: new Date(),
       },
     })

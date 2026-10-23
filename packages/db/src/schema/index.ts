@@ -241,8 +241,14 @@ export const contacts = pgTable(
     /** Só dígitos, quando conhecido. */
     phone: text("phone"),
     name: text("name"),
+    email: text("email"),
     /** Nome que a pessoa usa no WhatsApp. */
     pushName: text("push_name"),
+    /**
+     * true quando o wa_jid veio do próprio WhatsApp. Contatos cadastrados à mão ou importados
+     * ficam false até a primeira mensagem, quando o jid real substitui o provisório.
+     */
+    waVerified: boolean("wa_verified").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -346,7 +352,7 @@ export const messageMedia = pgTable("message_media", {
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 3 as const;
+export const schemaVersion = 4 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

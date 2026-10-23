@@ -9,16 +9,16 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F03 | Papéis e permissões | 0 | Concluído (proposta) | Unitário por papel + E2E vendedor sem acesso à Equipe. Matriz aguardando ajuste. |
 | F04 | Departamentos | 0 | Pendente | Tabela criada; telas entram junto com Conversas (Fase 1). |
 | F05 | Conexão WhatsApp por QR | 1 | Concluído | Tela Conexões (criar, QR, reconectar, desconectar, desativar, excluir), limite por empresa no Master, webhook com segredo por conexão. Integração + E2E; validado em produção com leitura real do QR (23/10/2026) e webhooks chegando da Evolution. |
-| F06 | Lista de conversas, nova conversa | 1 | Em validação | Lista em tempo real (SSE), filtros Abertas/Não lidas/Minhas/Fechadas/Todas, busca por nome ou número, nova conversa com checagem do número na Evolution e regra do 9º dígito. Integração + E2E. Falta: teste com WhatsApp real. |
+| F06 | Lista de conversas, nova conversa | 1 | Concluído | Lista em tempo real (SSE), filtros Abertas/Não lidas/Minhas/Fechadas/Todas, busca, nova conversa com checagem do número e regra do 9º dígito. Integração + E2E; validado em produção com WhatsApp real (23/10/2026). |
 | F07 | Filtros avançados e condições | 1 | Pendente |  |
-| F08 | Enviar e receber mídias | 1 | Em validação | Texto, imagem, vídeo, áudio (como arquivo) e documento nos dois sentidos; mídia baixada da Evolution uma vez e guardada; status enviado/entregue/lido; falha com "tentar de novo". Gravar áudio no navegador: pendente. |
+| F08 | Enviar e receber mídias | 1 | Concluído (parcial) | Texto, imagem, vídeo, áudio (como arquivo) e documento nos dois sentidos, status enviado/entregue/lido, "tentar de novo". Validado em produção. Pendente: gravar áudio no navegador. |
 | F09 | Responder, editar, excluir mensagem | 1 | Pendente |  |
 | F10 | Transcrição de áudio | 1 | Pendente |  |
-| F11 | Posse da conversa | 1 | Em validação | Puxar para mim, atribuir (gestor/admin), responder conversa sem dono assume; vendedor/atendente veem as suas e as sem dono. Integração + E2E. |
+| F11 | Posse da conversa | 1 | Concluído | Puxar para mim, atribuir (gestor/admin), responder conversa sem dono assume; vendedor/atendente veem as suas e as sem dono. Integração + E2E; validado em produção. |
 | F12 | Painel do lead, fechar/reabrir | 1 | Parcial | Fechar/reabrir feito (cliente escrevendo reabre). Painel do lead entra com o CRM de negociações. |
 | F13 | Sequências, respostas rápidas, ações rápidas (/), notas internas | 1 | Pendente |  |
 | F14 | Inteligência de Conversas | 1 | Pendente |  |
-| F15 | Contatos: CRUD, filtros, exportar | 1 | Pendente |  |
+| F15 | Contatos: CRUD, filtros, exportar | 1 | Em validação | Lista paginada com busca (nome, e-mail, telefone), novo, editar (telefone fixo), excluir com histórico, exportar CSV no formato antigo, importar CSV (export antigo e modelo) sem duplicar, inclusive com/sem o 9; contato importado se une ao WhatsApp quando a pessoa escreve. Integração + E2E. |
 | F16 | Funis e estágios | 1 | Pendente |  |
 | F17 | Kanban, mover estágio, histórico | 1 | Pendente |  |
 | F18 | Lista, paginação, exportar | 1 | Pendente |  |

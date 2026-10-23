@@ -330,3 +330,15 @@ export function normalizePhoneInput(
   }
   return d.length >= 8 && d.length <= 15 ? d : null;
 }
+
+/**
+ * Variações do mesmo celular brasileiro com e sem o 9 (o WhatsApp guarda muitos números antigos sem ele).
+ * Ex.: 5548999253654 <-> 554899253654.
+ */
+export function phoneVariants(phone: string): string[] {
+  const d = phone.replace(/\D/g, "");
+  if (d.startsWith("55") && d.length === 13 && d[4] === "9") return [d, d.slice(0, 4) + d.slice(5)];
+  if (d.startsWith("55") && d.length === 12 && /[6-9]/.test(d[4] ?? ""))
+    return [d, `${d.slice(0, 4)}9${d.slice(4)}`];
+  return [d];
+}

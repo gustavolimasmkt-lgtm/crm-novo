@@ -471,10 +471,14 @@ export async function startConversation(
   if (!phone) throw new AppError("validation", "Número inválido. Digite com DDD, ex.: 48 99999-9999.");
 
   let jid = `${phone}@s.whatsapp.net`;
+  let verified = false;
   try {
     const [r] = await evo.checkNumbers(connection.instanceName, [phone]);
     if (r && !r.exists) throw new AppError("validation", "Esse número não tem WhatsApp.");
-    if (r?.jid) jid = r.jid;
+    if (r?.jid) {
+      jid = r.jid;
+      verified = true;
+    }
   } catch (e) {
     if (e instanceof AppError) throw e;
     console.error("[checagem de número]", (e as Error).message);
@@ -484,6 +488,7 @@ export async function startConversation(
     contactJid: jid,
     phone: realPhone,
     fromMe: true,
+    verified,
   });
   const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, conversation.id) });
   if (

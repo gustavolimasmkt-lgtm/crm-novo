@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Settings2,
   Smartphone,
+  UserRound,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ export function Shell({
   const nav: NavItem[] = [
     { href: "/", label: "Início", icon: <Home size={20} /> },
     { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} /> },
+    { href: "/contatos", label: "Contatos", icon: <UserRound size={20} /> },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
@@ -46,7 +48,8 @@ export function Shell({
     { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
     ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
   ];
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <div className="min-h-dvh md:flex">

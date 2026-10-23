@@ -14,6 +14,8 @@ Implementação: `packages/core/src/auth/permissions.ts`.
 | Redistribuir negociações | sim | sim | não | não |
 | Ver valores das negociações | sim | sim | sim | não |
 | Puxar conversa para si | sim | sim | sim | sim |
+| Ver, criar e editar contatos | sim | sim | sim | sim |
+| Excluir, importar e exportar contatos | sim | sim | não | não |
 
 **Master** (conta da plataforma): cria, suspende e entra em qualquer empresa; define limites (conexões WhatsApp, créditos de IA).
 

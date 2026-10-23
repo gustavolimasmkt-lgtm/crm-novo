@@ -17,6 +17,8 @@ export const PERMISSIONS = {
   "deals.view_values": ["admin", "manager", "seller"],
   "conversations.view_all": ["admin", "manager"],
   "conversations.take": ["admin", "manager", "seller", "agent"],
+  /** Excluir, importar e exportar contatos. Ver, criar e editar: todos. */
+  "contacts.manage": ["admin", "manager"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
