@@ -20,6 +20,7 @@ import {
   normalizePhoneInput,
 } from "../whatsapp/evolution.js";
 import { previewOf } from "../whatsapp/parse.js";
+import { syncDealAssignee } from "./crm.js";
 import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
 import { upsertContactAndConversation } from "./messages.js";
@@ -225,6 +226,7 @@ export async function assignConversation(
     .update(conversations)
     .set({ assignedUserId: userId, updatedAt: new Date() })
     .where(eq(conversations.id, id));
+  await syncDealAssignee(db, organizationId, c.contactId, userId);
   await db.insert(auditLog).values({
     organizationId,
     actorId: actor.userId,
@@ -328,6 +330,8 @@ export async function sendMessage(
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId));
+  if (assign.assignedUserId)
+    await syncDealAssignee(db, organizationId, conv.contactId, assign.assignedUserId);
   await notifyOrg(db, { o: organizationId, t: "message", c: conversationId });
 
   await deliver(db, evo, organizationId, msg.id, connection.instanceName, jidToTarget(contact.waJid), {

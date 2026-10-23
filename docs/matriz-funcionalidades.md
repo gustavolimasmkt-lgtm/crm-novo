@@ -18,16 +18,16 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F12 | Painel do lead, fechar/reabrir | 1 | Parcial | Fechar/reabrir feito (cliente escrevendo reabre). Painel do lead entra com o CRM de negociações. |
 | F13 | Sequências, respostas rápidas, ações rápidas (/), notas internas | 1 | Pendente |  |
 | F14 | Inteligência de Conversas | 1 | Pendente |  |
-| F15 | Contatos: CRUD, filtros, exportar | 1 | Em validação | Lista paginada com busca (nome, e-mail, telefone), novo, editar (telefone fixo), excluir com histórico, exportar CSV no formato antigo, importar CSV (export antigo e modelo) sem duplicar, inclusive com/sem o 9; contato importado se une ao WhatsApp quando a pessoa escreve. Integração + E2E. |
-| F16 | Funis e estágios | 1 | Pendente |  |
-| F17 | Kanban, mover estágio, histórico | 1 | Pendente |  |
+| F15 | Contatos: CRUD, filtros, exportar | 1 | Concluído | Lista paginada com busca, novo, editar (telefone fixo), excluir com histórico, exportar e importar CSV (formato antigo e modelo) sem duplicar, com ou sem o 9. Integração + E2E; validado em produção com os 448 contatos (23/10/2026). |
+| F16 | Funis e estágios | 1 | Em validação | Vários funis, funil padrão (recebe leads automáticos), etapas com cor, ordem e tipo (andamento, agendamento, ganho, perdido); não exclui etapa/funil com negociações. Integração + E2E. |
+| F17 | Kanban, mover estágio, histórico | 1 | Em validação | Quadro por funil com contagem e soma por etapa, arrastar no computador, trocar etapa pelo painel no celular, tempo real, histórico (criação, etapa, responsável, valor, etiquetas, anotações). Integração + E2E. |
 | F18 | Lista, paginação, exportar | 1 | Pendente |  |
 | F19 | Ações em massa | 1 | Pendente |  |
-| F20 | Nova negociação | 1 | Pendente |  |
-| F21 | Detalhe: compras, atividades, produtos, score, campos | 1 | Pendente |  |
+| F20 | Nova negociação | 1 | Em validação | Por telefone (reaproveita o contato), título, valor, etapa, fonte e responsável; número sequencial por empresa. Lead automático no funil padrão para quem escreve pela primeira vez. Integração + E2E. |
+| F21 | Detalhe: compras, atividades, produtos, score, campos | 1 | Parcial | Painel com contato, link para a conversa, etapa, responsável, valor, fonte, descrição, etiquetas, anotações e campos trazidos na importação. Compras, produtos, score e campos personalizados: pendentes. |
 | F22 | Tarefas, modelos, Minhas tarefas | 1 | Pendente |  |
-| F23 | Etiquetas, fontes, campos, produtos | 1 | Pendente |  |
-| F24 | Importação CSV | 1 | Pendente |  |
+| F23 | Etiquetas, fontes, campos, produtos | 1 | Parcial | Etiquetas (cor, criar só admin/gestor) e fontes. Campos personalizados e produtos: pendentes. |
+| F24 | Importação CSV | 1 | Em validação | Contatos e negociações: export do sistema antigo e modelo (apenas_contato, criar_negociacao, recorrente, etiquetas, data de criação); cria funis, etapas, fontes e etiquetas que faltarem; reimportar o export não duplica; colunas sem campo próprio ficam guardadas na negociação. Integração + E2E. |
 | F25 | Rodízio de vendedores e aviso | 1 | Pendente |  |
 | F26 | Agente: prompt, etapas, FAQ, modelos, gerador | 1 | Pendente |  |
 | F27 | Agente: documentos (RAG) | 1 | Pendente |  |

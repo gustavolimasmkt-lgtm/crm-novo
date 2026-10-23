@@ -50,13 +50,18 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 const inputBase =
   "w-full h-11 rounded-xl bg-fill px-3.5 text-[15px] text-ink placeholder:text-ink-3 outline-none ring-0 transition focus:bg-surface focus:shadow-[0_0_0_4px_var(--accent-soft)] focus:outline-none";
 
+/** Se o className já define largura (w-...), não força w-full. */
+function base(className?: string) {
+  return /(^|\s)w-/.test(className ?? "") ? inputBase.replace("w-full ", "") : inputBase;
+}
+
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cx(inputBase, className)} {...props} />;
+  return <input className={cx(base(className), className)} {...props} />;
 }
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cx(inputBase, "appearance-none pr-8", className)} {...props}>
+    <select className={cx(base(className), "appearance-none pr-8", className)} {...props}>
       {children}
     </select>
   );

@@ -13,6 +13,8 @@ Implementação: `packages/core/src/auth/permissions.ts`.
 | Ver todas as negociações e conversas | sim | sim | só as suas e sem dono | só as suas e sem dono |
 | Redistribuir negociações | sim | sim | não | não |
 | Ver valores das negociações | sim | sim | sim | não |
+| Excluir negociação | sim | sim | não | não |
+| Configurar funis, etapas, etiquetas e fontes | sim | sim | não | não |
 | Puxar conversa para si | sim | sim | sim | sim |
 | Ver, criar e editar contatos | sim | sim | sim | sim |
 | Excluir, importar e exportar contatos | sim | sim | não | não |

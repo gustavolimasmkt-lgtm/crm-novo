@@ -61,7 +61,7 @@ test("conversas: recebe em tempo real, responde, anexa, fecha, inicia nova e res
   await page.getByRole("button", { name: "Criar e mostrar QR code" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await fetch(`${FAKE}/__test/scan-latest`, { method: "POST" });
-  await expect(page.getByText("WhatsApp conectado")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("WhatsApp conectado", { exact: true })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Concluir" }).click();
 
   // Abre Conversas pelo menu; mensagem chega sem recarregar

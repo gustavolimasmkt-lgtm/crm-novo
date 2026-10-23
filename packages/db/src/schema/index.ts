@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   customType,
   index,
@@ -350,9 +351,154 @@ export const messageMedia = pgTable("message_media", {
   createdAt: createdAt(),
 });
 
+/** Funil de vendas. Uma empresa pode ter vários; um é o padrão (recebe os leads automáticos). */
+export const pipelines = pgTable(
+  "pipelines",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("pipelines_org_idx").on(t.organizationId)],
+);
+
+/** O que a etapa representa nos relatórios. */
+export const stageKindEnum = pgEnum("stage_kind", ["open", "scheduled", "won", "lost"]);
+
+export const pipelineStages = pgTable(
+  "pipeline_stages",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    color: text("color").notNull().default("#8e8e93"),
+    kind: stageKindEnum("kind").notNull().default("open"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("stages_pipeline_idx").on(t.pipelineId, t.position)],
+);
+
+/** De onde o lead veio (Meta Ads, Indicação...). */
+export const dealSources = pgTable(
+  "deal_sources",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    key: text("key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("deal_sources_org_key_uq").on(t.organizationId, t.key)],
+);
+
+export const tags = pgTable(
+  "tags",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#0071e3"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("tags_org_name_uq").on(t.organizationId, sql`lower(${t.name})`)],
+);
+
+export const dealValueTypeEnum = pgEnum("deal_value_type", ["single", "recurring"]);
+
+/** Negociação (card do funil). Valores em centavos. */
+export const deals = pgTable(
+  "deals",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Número curto, sequencial por empresa, para falar "negociação 123". */
+    number: integer("number").notNull(),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "restrict" }),
+    stageId: uuid("stage_id")
+      .notNull()
+      .references(() => pipelineStages.id, { onDelete: "restrict" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    valueType: dealValueTypeEnum("value_type").notNull().default("single"),
+    valueCents: bigint("value_cents", { mode: "number" }).notNull().default(0),
+    setupCents: bigint("setup_cents", { mode: "number" }),
+    monthlyCents: bigint("monthly_cents", { mode: "number" }),
+    sourceId: uuid("source_id").references(() => dealSources.id, { onDelete: "set null" }),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "set null" }),
+    connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "set null" }),
+    description: text("description"),
+    /** Campos trazidos de outro sistema (importação) ainda sem campo próprio aqui. */
+    extra: jsonb("extra").$type<Record<string, string>>(),
+    stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("deals_org_number_uq").on(t.organizationId, t.number),
+    index("deals_stage_idx").on(t.stageId, t.updatedAt),
+    index("deals_contact_idx").on(t.contactId),
+    index("deals_org_assigned_idx").on(t.organizationId, t.assignedUserId),
+  ],
+);
+
+export const dealTags = pgTable(
+  "deal_tags",
+  {
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.dealId, t.tagId] })],
+);
+
+/** Histórico da negociação: criação, mudança de etapa, responsável, valor e anotações. */
+export const dealEvents = pgTable(
+  "deal_events",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    type: text("type").notNull(),
+    data: jsonb("data"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("deal_events_deal_idx").on(t.dealId, t.createdAt)],
+);
+
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 4 as const;
+export const schemaVersion = 5 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -363,3 +509,4 @@ export const ROLE_LABELS: Record<Role, string> = {
 export type ConversationStatus = (typeof conversationStatusEnum.enumValues)[number];
 export type MessageType = (typeof messageTypeEnum.enumValues)[number];
 export type MessageStatus = (typeof messageStatusEnum.enumValues)[number];
+export type StageKind = (typeof stageKindEnum.enumValues)[number];

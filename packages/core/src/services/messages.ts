@@ -10,6 +10,7 @@ import {
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { phoneVariants } from "../whatsapp/evolution.js";
 import { type ParsedMessage, parseMessage, parseStatus, previewOf } from "../whatsapp/parse.js";
+import { autoCreateDeal } from "./crm.js";
 import { notifyOrg } from "./events.js";
 
 type Connection = typeof whatsappConnections.$inferSelect;
@@ -90,7 +91,7 @@ export async function upsertContactAndConversation(
 
 /** Grava uma mensagem (recebida, ou enviada pelo celular). Ignora duplicadas pelo id do WhatsApp. */
 export async function storeParsedMessage(db: Database, c: Connection, p: ParsedMessage) {
-  const { conversation } = await upsertContactAndConversation(db, c, p);
+  const { conversation, contact } = await upsertContactAndConversation(db, c, p);
   const [msg] = await db
     .insert(messages)
     .values({
@@ -125,6 +126,8 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversation.id));
+  // Lead novo entra sozinho no funil padrão.
+  if (!p.fromMe) await autoCreateDeal(db, c.organizationId, contact.id, c.id);
   await notifyOrg(db, { o: c.organizationId, t: "message", c: conversation.id });
   return { conversationId: conversation.id, duplicate: false };
 }

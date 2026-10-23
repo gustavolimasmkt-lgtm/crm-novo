@@ -446,8 +446,8 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
             </Notice>
             {result.dealRows > 0 && (
               <p className="text-[14px] text-ink-2">
-                {result.dealRows} linhas pediam negociação: o contato foi importado; as negociações entram
-                quando o CRM de funil estiver pronto.
+                {result.dealRows} linhas pediam negociação: aqui só o contato foi importado. Para criar as
+                negociações, importe o mesmo arquivo em CRM → Importar.
               </p>
             )}
             {result.invalid.length > 0 && (

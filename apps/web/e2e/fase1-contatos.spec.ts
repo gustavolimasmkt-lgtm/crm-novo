@@ -90,7 +90,11 @@ test("contatos: importa o export antigo, busca, edita, cria, exporta e exclui", 
 
   // Exporta no formato antigo (no celular, fecha a folha do contato antes)
   const mobile = testInfo.project.name === "mobile";
-  if (mobile) await page.getByRole("complementary", { name: "Contato" }).getByRole("button", { name: "Fechar" }).click();
+  if (mobile)
+    await page
+      .getByRole("complementary", { name: "Contato" })
+      .getByRole("button", { name: "Fechar" })
+      .click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("link", { name: "Exportar" }).click(),

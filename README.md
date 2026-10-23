@@ -62,3 +62,10 @@ npx playwright test
 - Tempo real: `pg_notify('crm_events')` + `/api/eventos` (Server-Sent Events).
 - Mídias ficam em `message_media` (limite 16 MB por arquivo).
 - Grupos e listas de transmissão são guardados como evento, mas não viram conversa.
+
+## CRM
+
+- Funil padrão "Funil de Vendas" e fontes são criados na primeira vez que a empresa abre o CRM.
+- Quem escreve pela primeira vez no WhatsApp vira negociação na primeira etapa do funil padrão
+  (não recria se a pessoa já teve negociação ganha ou perdida).
+- Importar negociações (CRM → Importar) aceita o export do sistema antigo e o modelo; reimportar o export não duplica.

@@ -36,6 +36,7 @@ test("conexão de WhatsApp: cria, lê QR, conecta, respeita limite, desconecta e
   await page.goto(new URL(link).pathname);
   await page.getByLabel("Crie uma senha").fill("Admin12345");
   await page.getByRole("button", { name: "Aceitar e entrar" }).click();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Mais" }).click();
   await page.getByRole("link", { name: "Conexões" }).first().click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Conexões");
   await expect(page.getByText("Nenhum WhatsApp conectado")).toBeVisible();

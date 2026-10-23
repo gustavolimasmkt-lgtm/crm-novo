@@ -51,6 +51,8 @@ type Msg = {
   sentByName: string | null;
 };
 type Connection = { id: string; name: string; phone: string | null; status: string };
+type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
+type ThreadData = { conversation: Conv; messages: Msg[]; deal: DealChip | null };
 type Person = { id: string; name: string };
 
 const FILTERS: { id: Filter; label: string }[] = [
@@ -89,7 +91,7 @@ export function Inbox({
   const [q, setQ] = useState("");
   const [list, setList] = useState<Conv[]>(initial);
   const [selected, setSelected] = useState<string | null>(initialSelected);
-  const [thread, setThread] = useState<{ conversation: Conv; messages: Msg[] } | null>(null);
+  const [thread, setThread] = useState<ThreadData | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [live, setLive] = useState(false);
@@ -108,7 +110,7 @@ export function Inbox({
 
   const loadThread = useCallback(async (id: string) => {
     try {
-      const t = await api<{ conversation: Conv; messages: Msg[] }>(`/api/conversas/${id}`);
+      const t = await api<ThreadData>(`/api/conversas/${id}`);
       if (selectedRef.current !== id) return;
       setThread(t);
       setThreadError(null);
@@ -353,7 +355,7 @@ function Thread({
   onChanged,
 }: {
   id: string;
-  thread: { conversation: Conv; messages: Msg[] } | null;
+  thread: ThreadData | null;
   error: string | null;
   me: { id: string; name: string };
   people: Person[];
@@ -412,6 +414,21 @@ function Thread({
               <p className="truncate text-[12px] text-ink-2">
                 {formatPhone(c.contactPhone)} · {c.connectionName}
               </p>
+              {thread?.deal && (
+                <Link
+                  href={`/crm?n=${thread.deal.id}`}
+                  className="mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12px] font-medium text-accent"
+                  data-testid="deal-chip"
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: thread.deal.stageColor }}
+                  />
+                  <span className="truncate">
+                    {thread.deal.pipelineName} · {thread.deal.stageName}
+                  </span>
+                </Link>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {canViewAll ? (

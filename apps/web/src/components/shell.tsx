@@ -5,7 +5,9 @@ import {
   ChevronsUpDown,
   Crown,
   Home,
+  KanbanSquare,
   LogOut,
+  Menu,
   MessageCircle,
   Settings2,
   Smartphone,
@@ -19,7 +21,7 @@ import { logoutAction, switchOrgAction } from "@/app/actions/auth";
 import { Avatar, cx } from "./ui";
 
 type Org = { id: string; name: string };
-type NavItem = { href: string; label: string; icon: ReactNode };
+type NavItem = { href: string; label: string; icon: ReactNode; primary?: boolean };
 
 export function Shell({
   children,
@@ -37,10 +39,12 @@ export function Shell({
   canManageConnections: boolean;
 }) {
   const pathname = usePathname();
+  const [more, setMore] = useState(false);
   const nav: NavItem[] = [
-    { href: "/", label: "Início", icon: <Home size={20} /> },
-    { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} /> },
-    { href: "/contatos", label: "Contatos", icon: <UserRound size={20} /> },
+    { href: "/", label: "Início", icon: <Home size={20} />, primary: true },
+    { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} />, primary: true },
+    { href: "/crm", label: "CRM", icon: <KanbanSquare size={20} />, primary: true },
+    { href: "/contatos", label: "Contatos", icon: <UserRound size={20} />, primary: true },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
@@ -99,25 +103,71 @@ export function Shell({
         <div className="mx-auto max-w-[1100px]">{children}</div>
       </main>
 
-      {/* Barra de abas (celular) */}
+      {/* Barra de abas (celular): 4 principais + Mais */}
       <nav
         aria-label="Principal"
         className="material fixed inset-x-0 bottom-0 z-20 flex border-t border-separator pb-[env(safe-area-inset-bottom)] md:hidden"
       >
-        {nav.map((n) => (
-          <Link
-            key={n.href}
-            href={n.href}
-            className={cx(
-              "flex h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
-              isActive(n.href) ? "text-accent" : "text-ink-3",
-            )}
-          >
-            {n.icon}
-            {n.label}
-          </Link>
-        ))}
+        {nav
+          .filter((n) => n.primary)
+          .map((n) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              className={cx(
+                "flex h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
+                isActive(n.href) ? "text-accent" : "text-ink-3",
+              )}
+            >
+              {n.icon}
+              {n.label}
+            </Link>
+          ))}
+        <button
+          type="button"
+          onClick={() => setMore(true)}
+          className={cx(
+            "flex h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
+            nav.some((n) => !n.primary && isActive(n.href)) ? "text-accent" : "text-ink-3",
+          )}
+        >
+          <Menu size={20} />
+          Mais
+        </button>
       </nav>
+      {more && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40 md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mais"
+        >
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Fechar"
+            onClick={() => setMore(false)}
+          />
+          <div className="relative w-full rounded-t-[22px] bg-surface p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {nav
+              .filter((n) => !n.primary)
+              .map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  onClick={() => setMore(false)}
+                  className={cx(
+                    "flex h-12 items-center gap-3 rounded-xl px-3 text-[16px]",
+                    isActive(n.href) ? "bg-accent-soft text-accent" : "text-ink",
+                  )}
+                >
+                  {n.icon}
+                  {n.label}
+                </Link>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   "deals.view_all": ["admin", "manager"],
   "deals.reassign": ["admin", "manager"],
   "deals.view_values": ["admin", "manager", "seller"],
+  "deals.delete": ["admin", "manager"],
   "conversations.view_all": ["admin", "manager"],
   "conversations.take": ["admin", "manager", "seller", "agent"],
   /** Excluir, importar e exportar contatos. Ver, criar e editar: todos. */

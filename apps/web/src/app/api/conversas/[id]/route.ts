@@ -1,4 +1,4 @@
-import { getConversation, listMessages } from "@crm/core";
+import { getConversation, getOpenDealForContact, listMessages } from "@crm/core";
 import { getDb } from "@crm/db";
 import { withOrg } from "@/lib/api";
 
@@ -11,5 +11,6 @@ export const GET = withOrg<{ id: string }>(async (req, ctx, { id }) => {
   const items = await listMessages(db, ctx.actor, ctx.organizationId, id, {
     before: before ? new Date(before) : undefined,
   });
-  return Response.json({ conversation, messages: items }, { headers: { "cache-control": "no-store" } });
+  const deal = await getOpenDealForContact(db, ctx.actor, ctx.organizationId, conversation.contactId);
+  return Response.json({ conversation, messages: items, deal }, { headers: { "cache-control": "no-store" } });
 });
