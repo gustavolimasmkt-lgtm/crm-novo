@@ -3,6 +3,7 @@
 import {
   Bot,
   Building2,
+  CalendarDays,
   ChevronsUpDown,
   Crown,
   Home,
@@ -10,6 +11,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Package,
   Settings2,
   Smartphone,
   UserRound,
@@ -48,6 +50,8 @@ export function Shell({
     { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} />, primary: true },
     { href: "/crm", label: "CRM", icon: <KanbanSquare size={20} />, primary: true },
     { href: "/contatos", label: "Contatos", icon: <UserRound size={20} />, primary: true },
+    { href: "/agenda", label: "Agenda", icon: <CalendarDays size={20} /> },
+    { href: "/catalogo", label: "Catálogo", icon: <Package size={20} /> },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]

@@ -43,6 +43,13 @@
       "when": 1792792672281,
       "tag": "0005_agente_ia",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792845001895,
+      "tag": "0006_catalogo_agenda_rodizio",
+      "breakpoints": true
     }
   ]
 }

@@ -573,6 +573,7 @@ export async function sendAiMessage(
   organizationId: string,
   conversationId: string,
   text: string,
+  image?: { name: string; mime: string; data: Buffer },
 ) {
   const conv = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.organizationId, organizationId)),
@@ -584,6 +585,7 @@ export async function sendAiMessage(
   const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, conv.contactId) });
   if (!connection || !contact || !connection.active || connection.status !== "open")
     throw new AppError("validation", "Conexão indisponível para a IA responder.");
+  const type = image ? ("image" as const) : ("text" as const);
   const [msg] = await db
     .insert(messages)
     .values({
@@ -591,26 +593,34 @@ export async function sendAiMessage(
       conversationId,
       connectionId: connection.id,
       direction: "out",
-      type: "text",
-      body: text,
+      type,
+      body: text || null,
+      mediaMime: image?.mime ?? null,
+      mediaName: image?.name ?? null,
       status: "pending",
       sentByAi: true,
     })
     .returning();
   if (!msg) throw new Error("Falha ao gravar mensagem");
+  if (image)
+    await db
+      .insert(messageMedia)
+      .values({ messageId: msg.id, mime: image.mime, fileName: image.name, data: image.data })
+      .onConflictDoNothing();
   await db
     .update(conversations)
     .set({
       lastMessageAt: msg.sentAt,
-      lastMessagePreview: previewOf("text", text),
+      lastMessagePreview: previewOf(type, text || null),
       lastMessageFromMe: true,
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId));
   await notifyOrg(db, { o: organizationId, t: "message", c: conversationId });
   await deliver(db, evo, organizationId, msg.id, connection.instanceName, jidToTarget(contact.waJid), {
-    type: "text",
-    text,
+    type,
+    text: text || null,
+    file: image,
   });
   return msg.id;
 }

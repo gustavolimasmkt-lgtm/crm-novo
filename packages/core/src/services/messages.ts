@@ -13,6 +13,7 @@ import { type ParsedMessage, parseMessage, parseStatus, previewOf } from "../wha
 import { maybeEnqueueAi } from "./agent.js";
 import { autoCreateDeal } from "./crm.js";
 import { notifyOrg } from "./events.js";
+import { distributeLead } from "./rotation.js";
 
 type Connection = typeof whatsappConnections.$inferSelect;
 type Obj = Record<string, unknown>;
@@ -129,7 +130,12 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     .where(eq(conversations.id, conversation.id));
   // Lead novo entra sozinho no funil padrão.
   if (!p.fromMe) {
-    await autoCreateDeal(db, c.organizationId, contact.id, c.id);
+    const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id);
+    if (newDealId)
+      await distributeLead(db, c.organizationId, newDealId, conversation.id, c.id, {
+        name: contact.name ?? contact.pushName ?? null,
+        phone: contact.phone ?? null,
+      });
     await maybeEnqueueAi(db, c.organizationId, conversation.id, c.id);
   }
   await notifyOrg(db, { o: c.organizationId, t: "message", c: conversation.id });

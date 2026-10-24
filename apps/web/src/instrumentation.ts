@@ -1,6 +1,7 @@
 /**
  * Ao subir o servidor:
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
+ * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
  * - envia as respostas agendadas do agente de IA (a cada 3 s).
  */
 export async function register() {
@@ -14,6 +15,23 @@ export async function register() {
   setInterval(() => {
     core.processPendingEvents(getDb()).catch((e) => console.error("[reprocessador]", e));
   }, 30_000).unref?.();
+
+  const { EVOLUTION_API_URL: evoUrl, EVOLUTION_API_KEY: evoKey } = process.env;
+  if (evoUrl && evoKey) {
+    const evo = core.createEvolutionClient({ baseUrl: evoUrl, apiKey: evoKey });
+    let sending = false;
+    setInterval(async () => {
+      if (sending) return;
+      sending = true;
+      try {
+        await core.processOutbox(getDb(), evo);
+      } catch (e) {
+        console.error("[avisos]", e);
+      } finally {
+        sending = false;
+      }
+    }, 5_000).unref?.();
+  }
 
   const {
     EVOLUTION_API_URL,

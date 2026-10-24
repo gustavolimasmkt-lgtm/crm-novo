@@ -75,6 +75,12 @@ npx playwright test
 
 - Tela "Agente de IA" (admin/gestor): instruções, modelo, espera, histórico, simulador e importação do agente antigo.
 - Respostas agendadas em `ai_jobs` (agrupa mensagens em sequência) e enviadas por um timer de 3 s (`instrumentation.ts`).
-- Ferramentas da IA: transferir_para_humano, encerrar_atendimento e mover_etapa.
+- Ferramentas da IA: transferir_para_humano, encerrar_atendimento e mover_etapa; buscar_catalogo e enviar_fotos quando há itens ativos no Catálogo; ver_horarios e marcar_visita quando a Agenda libera a IA.
 - A IA pausa quando um atendente responde (pelo CRM ou pelo celular) e quando os créditos do mês acabam.
 - 1 crédito = 1.000 tokens; limite por empresa no painel Master.
+
+## Catálogo, agenda e rodízio
+
+- Catálogo (`/catalogo`): itens com fotos no banco (`product_photos`), importação do `.json` do agente antigo ou CSV `titulo;descricao;valor`.
+- Agenda (`/agenda`): expediente, duração e capacidade em `schedule_settings`; visitas em `appointments`. Horário fixo de Brasília (-03:00).
+- Rodízio (`/equipe`) e telefone de aviso (`/conta`). Avisos vão para `notification_outbox` e saem por um timer de 5 s pela conexão de WhatsApp aberta da empresa. O link do aviso usa `APP_URL`.

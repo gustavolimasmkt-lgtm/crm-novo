@@ -1,15 +1,19 @@
-import { can, listMembers } from "@crm/core";
+import { can, listMembers, rotationOverview } from "@crm/core";
 import { getDb, ROLE_LABELS } from "@crm/db";
 import { revokeInviteAction } from "@/app/actions/team";
 import { Avatar, Badge, GroupedList, PageHeader } from "@/components/ui";
 import { requirePermission } from "@/lib/session";
+import { RotationForm } from "./rotation-form";
 import { InviteForm, MemberControls } from "./team-forms";
 
 export const metadata = { title: "Equipe" };
 
 export default async function TeamPage() {
   const ctx = await requirePermission("members.view");
-  const { members, pending } = await listMembers(getDb(), ctx.actor, ctx.organization.id);
+  const [{ members, pending }, rotation] = await Promise.all([
+    listMembers(getDb(), ctx.actor, ctx.organization.id),
+    rotationOverview(getDb(), ctx.organization.id),
+  ]);
   const canManage = can(ctx.actor, "members.manage");
   const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 
@@ -57,7 +61,16 @@ export default async function TeamPage() {
             </GroupedList>
           )}
         </div>
-        <InviteForm canInviteAdmin={canManage} />
+        <div className="space-y-6">
+          <InviteForm canInviteAdmin={canManage} />
+          <RotationForm
+            enabled={rotation.enabled}
+            notify={rotation.notify}
+            userIds={rotation.userIds}
+            people={rotation.people}
+            canEdit={can(ctx.actor, "settings.manage")}
+          />
+        </div>
       </div>
     </>
   );

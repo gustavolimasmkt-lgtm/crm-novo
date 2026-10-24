@@ -273,6 +273,8 @@ function Simulator({ instructions, model }: { instructions: string; model: strin
       if (!r.ok) throw new Error(j.error ?? "Erro no simulador.");
       const notes = [
         j.movedTo ? `moveu para ${j.movedTo}` : "",
+        j.photos ? `enviaria ${j.photos === 1 ? "as fotos de 1 item" : `as fotos de ${j.photos} itens`}` : "",
+        j.booked ? j.booked : "",
         j.transferred ? `passou para humano: ${j.reason}` : "",
         j.ended ? "encerrou o atendimento" : "",
       ].filter(Boolean);

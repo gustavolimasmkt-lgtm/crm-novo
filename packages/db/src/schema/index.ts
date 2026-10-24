@@ -53,6 +53,8 @@ export const users = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash"),
     isMaster: boolean("is_master").notNull().default(false),
+    /** WhatsApp pessoal para avisos (novo lead, transferência, visita). Só dígitos. */
+    phone: text("phone"),
     active: boolean("active").notNull().default(true),
     lastOrganizationId: uuid("last_organization_id"),
     createdAt: createdAt(),
@@ -556,9 +558,128 @@ export const aiUsage = pgTable(
   (t) => [index("ai_usage_org_created_idx").on(t.organizationId, t.createdAt)],
 );
 
+/** Catálogo de produtos (ex.: veículos) que o agente de IA consulta. Valores em centavos. */
+export const products = pgTable(
+  "products",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    priceCents: bigint("price_cents", { mode: "number" }),
+    /** Texto livre que substitui o valor (ex.: "Consulte"). */
+    priceLabel: text("price_label"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("products_org_idx").on(t.organizationId, t.active)],
+);
+
+export const productPhotos = pgTable(
+  "product_photos",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    mime: text("mime").notNull(),
+    fileName: text("file_name"),
+    data: bytea("data").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("product_photos_product_idx").on(t.productId, t.position)],
+);
+
+export const appointmentStatusEnum = pgEnum("appointment_status", [
+  "scheduled",
+  "attended",
+  "no_show",
+  "canceled",
+]);
+
+/** Visitas, test drives e reuniões. */
+export const appointments = pgTable(
+  "appointments",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
+    connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "set null" }),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: appointmentStatusEnum("status").notNull().default("scheduled"),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdByAi: boolean("created_by_ai").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("appointments_org_start_idx").on(t.organizationId, t.startsAt)],
+);
+
+/** Horário de atendimento da agenda (por dia da semana: 0 = domingo) e regras de marcação. */
+export type WeekHours = Record<string, [string, string] | null>;
+export const scheduleSettings = pgTable("schedule_settings", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  /** O agente de IA pode marcar visitas. */
+  aiCanBook: boolean("ai_can_book").notNull().default(false),
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  perSlot: integer("per_slot").notNull().default(1),
+  hours: jsonb("hours").$type<WeekHours>().notNull(),
+  updatedAt: updatedAt(),
+});
+
+/** Rodízio de vendedores: quem recebe os leads novos, em ordem. */
+export const leadRotation = pgTable("lead_rotation", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  userIds: jsonb("user_ids").$type<string[]>().notNull().default([]),
+  lastUserId: uuid("last_user_id"),
+  /** Avisa no WhatsApp pessoal do vendedor. */
+  notify: boolean("notify").notNull().default(true),
+  updatedAt: updatedAt(),
+});
+
+/** Avisos de WhatsApp para a equipe, enviados por um timer (não dependem de quem gerou). */
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "cascade" }),
+    toPhone: text("to_phone").notNull(),
+    body: text("body").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("outbox_pending_idx").on(t.sentAt, t.createdAt)],
+);
+
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 6 as const;
+export const schemaVersion = 7 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -570,3 +691,4 @@ export type ConversationStatus = (typeof conversationStatusEnum.enumValues)[numb
 export type MessageType = (typeof messageTypeEnum.enumValues)[number];
 export type MessageStatus = (typeof messageStatusEnum.enumValues)[number];
 export type StageKind = (typeof stageKindEnum.enumValues)[number];
+export type AppointmentStatus = (typeof appointmentStatusEnum.enumValues)[number];
