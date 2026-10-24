@@ -3,6 +3,7 @@
  * - se a última mensagem do cliente pede "humano"/"vendedor", chama a ferramenta de transferência;
  * - "tem <termo>" busca no catálogo (e "foto" na mesma frase pede as fotos do primeiro achado);
  * - "horarios AAAA-MM-DD" consulta a agenda; "marcar visita AAAA-MM-DD HH:MM" marca;
+ * - pedido de follow-up: "Oi! Ainda tem interesse?" (ou NAO_ENVIAR se o cliente se despediu);
  * - senão, responde "Resposta automática: <última mensagem>".
  */
 import { createServer, type Server } from "node:http";
@@ -86,6 +87,18 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
         return text("Tudo bem! Obrigado pelo contato.");
       }
       const line = userText ?? "";
+      // Follow-up: o sistema pede uma retomada.
+      if (line.startsWith("[Aviso do sistema")) {
+        const fromClient = (b.messages ?? []).filter(
+          (m) => m.role === "user" && typeof m.content === "string",
+        );
+        const prevClient = String(fromClient.at(-2)?.content ?? "");
+        return text(
+          /tchau|não tenho interesse/i.test(prevClient)
+            ? "NAO_ENVIAR"
+            : "Oi! Ainda tem interesse? Posso ajudar?",
+        );
+      }
       const book = line.match(/marcar visita (\d{4}-\d{2}-\d{2} \d{2}:\d{2})/i);
       if (book && offered.has("marcar_visita"))
         return tool("t6", "marcar_visita", { data_hora: book[1], observacao: "pelo teste" });

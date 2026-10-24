@@ -143,7 +143,7 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
       lastMessageFromMe: sql`case when ${newer} then ${p.fromMe} else ${conversations.lastMessageFromMe} end`,
       unreadCount: p.fromMe ? 0 : sql`${conversations.unreadCount} + 1`,
       // Cliente escreveu numa conversa fechada: reabre.
-      ...(p.fromMe ? {} : { status: "open" as const }),
+      ...(p.fromMe ? {} : { status: "open" as const, followupCount: 0 }),
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversation.id));

@@ -1,4 +1,11 @@
-import { brParts, can, getScheduleSettings, listAppointments, listAssignableUsers } from "@crm/core";
+import {
+  brParts,
+  can,
+  DEFAULT_REMINDER,
+  getScheduleSettings,
+  listAppointments,
+  listAssignableUsers,
+} from "@crm/core";
 import { getDb } from "@crm/db";
 import Link from "next/link";
 import { cx, PageHeader } from "@/components/ui";
@@ -77,7 +84,11 @@ export default async function AgendaPage({
           durationMinutes: settings.durationMinutes,
           perSlot: settings.perSlot,
           hours: settings.hours,
+          remindEnabled: settings.remindEnabled,
+          remindHours: settings.remindHours,
+          remindTemplate: settings.remindTemplate ?? "",
         }}
+        defaultReminder={DEFAULT_REMINDER}
         todayIso={brParts(new Date()).date}
       />
     </>

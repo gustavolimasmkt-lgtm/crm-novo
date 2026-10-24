@@ -31,6 +31,9 @@ type Settings = {
   durationMinutes: number;
   perSlot: number;
   hours: Record<string, [string, string] | null>;
+  remindEnabled: boolean;
+  remindHours: number[];
+  remindTemplate: string;
 };
 
 const STATUS: Record<Status, { label: string; tone: "accent" | "ok" | "warn" | "neutral" }> = {
@@ -59,6 +62,7 @@ export function AgendaClient({
   canConfigure,
   settings,
   todayIso,
+  defaultReminder,
 }: {
   items: Item[];
   past: boolean;
@@ -68,6 +72,7 @@ export function AgendaClient({
   canConfigure: boolean;
   settings: Settings;
   todayIso: string;
+  defaultReminder: string;
 }) {
   const [creating, setCreating] = useState(false);
   const [configuring, setConfiguring] = useState(false);
@@ -215,7 +220,7 @@ export function AgendaClient({
       )}
       {configuring && (
         <Sheet title="Horários e IA" onClose={() => setConfiguring(false)}>
-          <ScheduleForm settings={settings} />
+          <ScheduleForm settings={settings} defaultReminder={defaultReminder} />
         </Sheet>
       )}
     </div>
@@ -325,7 +330,7 @@ function NewAppointment({
   );
 }
 
-function ScheduleForm({ settings }: { settings: Settings }) {
+function ScheduleForm({ settings, defaultReminder }: { settings: Settings; defaultReminder: string }) {
   const { state, pending, onSubmit } = useForm(saveScheduleAction);
   return (
     <form onSubmit={onSubmit} className="space-y-5">
@@ -390,6 +395,35 @@ function ScheduleForm({ settings }: { settings: Settings }) {
             </div>
           );
         })}
+      </div>
+      <div className="space-y-3 rounded-xl bg-surface px-4 py-3">
+        <label className="flex items-center justify-between gap-4">
+          <span>
+            <span className="block text-[15px] font-semibold">Lembrar o cliente da visita</span>
+            <span className="block text-[13px] text-ink-2">
+              Mensagem automática no WhatsApp. No último lembrete, o responsável também recebe aviso.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            name="remindEnabled"
+            defaultChecked={settings.remindEnabled}
+            className="size-5 shrink-0 accent-[var(--accent)]"
+          />
+        </label>
+        <Field label="Quantas horas antes" hint="Até 3 lembretes, separados por vírgula. Ex.: 24, 2">
+          <Input name="remindHours" defaultValue={settings.remindHours.join(", ")} inputMode="numeric" />
+        </Field>
+        <Field label="Mensagem" hint="Use {nome}, {quando} e {empresa}. Vazio usa o texto padrão.">
+          <textarea
+            name="remindTemplate"
+            defaultValue={settings.remindTemplate}
+            placeholder={defaultReminder}
+            rows={3}
+            maxLength={1000}
+            className="w-full rounded-xl bg-fill px-3.5 py-3 text-[14px] outline-none focus:bg-surface focus:shadow-[0_0_0_4px_var(--accent-soft)]"
+          />
+        </Field>
       </div>
       {state.error && <Notice>{state.error}</Notice>}
       {state.ok && <Notice tone="ok">{state.message}</Notice>}

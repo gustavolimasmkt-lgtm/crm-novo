@@ -4,6 +4,7 @@ import {
   DEFAULT_HANDOFF,
   getAgent,
   getAiUsage,
+  getFollowupSettings,
   getRotation,
   getScheduleSettings,
   listProducts,
@@ -15,6 +16,7 @@ import Link from "next/link";
 import { Badge, PageHeader } from "@/components/ui";
 import { requirePermission } from "@/lib/session";
 import { AgentForm } from "./agent-form";
+import { FollowupForm } from "./followup-form";
 
 export const metadata = { title: "Agente de IA" };
 export const dynamic = "force-dynamic";
@@ -22,13 +24,14 @@ export const dynamic = "force-dynamic";
 export default async function AgentPage() {
   const ctx = await requirePermission("settings.manage");
   const db = getDb();
-  const [agent, usage, connections, items, schedule, rotation] = await Promise.all([
+  const [agent, usage, connections, items, schedule, rotation, followup] = await Promise.all([
     getAgent(db, ctx.organization.id),
     getAiUsage(db, ctx.organization.id),
     listUsableConnections(db, ctx.organization.id),
     listProducts(db, ctx.organization.id, { onlyActive: true }),
     getScheduleSettings(db, ctx.organization.id),
     getRotation(db, ctx.organization.id),
+    getFollowupSettings(db, ctx.organization.id),
   ]);
   const tools = [
     {
@@ -46,6 +49,14 @@ export default async function AgentPage() {
       text: schedule.aiCanBook ? "marca visitas sozinho" : "desligada: o agente transfere para marcar",
     },
     {
+      href: "/agente#follow-up",
+      label: "Follow-up",
+      on: followup.enabled,
+      text: followup.enabled
+        ? `${followup.steps.map((x) => `${x.hours}h`).join(", ")} sem resposta`
+        : "desligado",
+    },
+    {
       href: "/equipe",
       label: "Rodízio",
       on: rotation.enabled,
@@ -55,7 +66,7 @@ export default async function AgentPage() {
   return (
     <>
       <PageHeader title="Agente de IA" subtitle="Responde no WhatsApp com base nas suas instruções" />
-      <div className="mb-6 grid gap-2 sm:grid-cols-3" data-testid="ferramentas-agente">
+      <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="ferramentas-agente">
         {tools.map((t) => (
           <Link
             key={t.href}
@@ -88,6 +99,17 @@ export default async function AgentPage() {
         defaultHandoff={DEFAULT_HANDOFF}
         keyConfigured={Boolean(process.env.ANTHROPIC_API_KEY)}
       />
+      <div id="follow-up" className="mt-8 max-w-[720px] scroll-mt-6">
+        <FollowupForm
+          settings={{
+            enabled: followup.enabled,
+            steps: followup.steps,
+            windowStart: followup.windowStart,
+            windowEnd: followup.windowEnd,
+            sundays: followup.sundays,
+          }}
+        />
+      </div>
     </>
   );
 }

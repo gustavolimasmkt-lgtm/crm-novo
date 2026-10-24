@@ -358,7 +358,7 @@ export async function getAiUsage(db: Database, organizationId: string) {
   return { tokens, usedCredits, limitCredits, exhausted: usedCredits >= limitCredits };
 }
 
-async function recordUsage(
+export async function recordUsage(
   db: Database,
   organizationId: string,
   conversationId: string | null,

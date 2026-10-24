@@ -1,6 +1,6 @@
 "use server";
 
-import { saveAgent } from "@crm/core";
+import { saveAgent, saveFollowupSettings } from "@crm/core";
 import { getDb } from "@crm/db";
 import { revalidatePath } from "next/cache";
 import { type FormState, str, toFormError } from "@/lib/form";
@@ -24,4 +24,25 @@ export async function saveAgentAction(_: FormState, fd: FormData): Promise<FormS
   }
   revalidatePath("/agente");
   return { ok: true, message: "Agente salvo." };
+}
+
+export async function saveFollowupAction(_: FormState, fd: FormData): Promise<FormState> {
+  const ctx = await requireOrg();
+  try {
+    const hours = fd.getAll("stepHours").map((v) => String(v));
+    const texts = fd.getAll("stepText").map((v) => String(v));
+    await saveFollowupSettings(getDb(), ctx.actor, ctx.organization.id, {
+      enabled: str(fd, "enabled") === "on",
+      steps: hours
+        .map((h, i) => ({ hours: Number(h), text: texts[i]?.trim() || null }))
+        .filter((s) => s.hours > 0),
+      windowStart: str(fd, "windowStart") || "08:00",
+      windowEnd: str(fd, "windowEnd") || "20:00",
+      sundays: str(fd, "sundays") === "on",
+    });
+  } catch (e) {
+    return toFormError(e);
+  }
+  revalidatePath("/agente");
+  return { ok: true, message: "Follow-up salvo." };
 }

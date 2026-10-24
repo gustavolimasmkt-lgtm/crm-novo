@@ -84,3 +84,8 @@ npx playwright test
 - Catálogo (`/catalogo`): itens com fotos no banco (`product_photos`), importação do `.json` do agente antigo ou CSV `titulo;descricao;valor`.
 - Agenda (`/agenda`): expediente, duração e capacidade em `schedule_settings`; visitas em `appointments`. Horário fixo de Brasília (-03:00).
 - Rodízio (`/equipe`) e telefone de aviso (`/conta`). Avisos vão para `notification_outbox` e saem por um timer de 5 s pela conexão de WhatsApp aberta da empresa. O link do aviso usa `APP_URL`.
+
+## Follow-up e lembretes
+
+- Follow-up (tela do Agente, `followup_settings`): timer de 60 s; só age quando a última mensagem foi da IA. Contador em `conversations.followup_count`, zerado quando o cliente escreve.
+- Lembretes de visita (Agenda → Horários e IA): timer de 60 s; horas já tratadas ficam em `appointments.reminders_sent`.

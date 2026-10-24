@@ -5,6 +5,7 @@ export * from "./csv.js";
 export * from "./money.js";
 export * from "./services/agent.js";
 export * from "./services/auth.js";
+export * from "./services/automations.js";
 export * from "./services/catalog.js";
 export * from "./services/connections.js";
 export * from "./services/contacts.js";

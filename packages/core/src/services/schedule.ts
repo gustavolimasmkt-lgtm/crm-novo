@@ -44,6 +44,9 @@ export async function getScheduleSettings(db: Database, organizationId: string) 
       durationMinutes: 30,
       perSlot: 1,
       hours: DEFAULT_HOURS,
+      remindEnabled: false,
+      remindHours: [24, 2],
+      remindTemplate: null as string | null,
       updatedAt: new Date(),
     }
   );
@@ -55,7 +58,22 @@ export const scheduleInput = z.object({
   durationMinutes: z.coerce.number().int().min(10).max(240),
   perSlot: z.coerce.number().int().min(1).max(50),
   hours: z.record(z.string().regex(/^[0-6]$/), z.tuple([hhmm, hhmm]).nullable()),
+  remindEnabled: z.boolean().default(false),
+  remindHours: z
+    .array(
+      z.coerce
+        .number()
+        .int()
+        .min(1, "Lembrete: mínimo 1 hora antes.")
+        .max(72, "Lembrete: máximo 72 horas antes."),
+    )
+    .max(3, "No máximo 3 lembretes.")
+    .default([24, 2]),
+  remindTemplate: z.string().max(1000).nullable().default(null),
 });
+
+export const DEFAULT_REMINDER =
+  "Oi {nome}! Passando para lembrar da sua visita {quando} na {empresa}. Se precisar remarcar, é só responder aqui. Até lá!";
 
 export async function saveScheduleSettings(
   db: Database,
@@ -69,7 +87,14 @@ export async function saveScheduleSettings(
   for (const [d, v] of Object.entries(input.hours))
     if (v && v[0] >= v[1])
       throw new AppError("validation", `Em ${DAY_NAMES[Number(d)]}, o fim precisa ser depois do início.`);
-  const values = { ...input, updatedAt: new Date() };
+  if (input.remindEnabled && !input.remindHours.length)
+    throw new AppError("validation", "Informe quantas horas antes enviar o lembrete.");
+  const values = {
+    ...input,
+    remindHours: [...new Set(input.remindHours)].sort((a, b) => b - a),
+    remindTemplate: input.remindTemplate?.trim() || null,
+    updatedAt: new Date(),
+  };
   await db
     .insert(scheduleSettings)
     .values({ organizationId, ...values })

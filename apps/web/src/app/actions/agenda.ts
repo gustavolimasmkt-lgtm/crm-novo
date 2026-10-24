@@ -54,6 +54,12 @@ export async function saveScheduleAction(_: FormState, fd: FormData): Promise<Fo
       durationMinutes: Number(str(fd, "durationMinutes") || 30),
       perSlot: Number(str(fd, "perSlot") || 1),
       hours,
+      remindEnabled: str(fd, "remindEnabled") === "on",
+      remindHours: str(fd, "remindHours")
+        .split(/[^\d]+/)
+        .filter(Boolean)
+        .map(Number),
+      remindTemplate: str(fd, "remindTemplate") || null,
     });
   } catch (e) {
     return toFormError(e);

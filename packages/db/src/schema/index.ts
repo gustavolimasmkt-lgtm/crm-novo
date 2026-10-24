@@ -286,6 +286,8 @@ export const conversations = pgTable(
     /** Agente de IA parado nesta conversa (humano assumiu ou transferência). */
     aiPaused: boolean("ai_paused").notNull().default(false),
     aiPausedReason: text("ai_paused_reason"),
+    /** Follow-ups da IA já enviados desde a última mensagem do cliente. */
+    followupCount: integer("followup_count").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -625,6 +627,8 @@ export const appointments = pgTable(
     notes: text("notes"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdByAi: boolean("created_by_ai").notNull().default(false),
+    /** Lembretes já tratados (horas antes da visita). */
+    remindersSent: jsonb("reminders_sent").$type<number[]>().notNull().default([]),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -642,6 +646,25 @@ export const scheduleSettings = pgTable("schedule_settings", {
   durationMinutes: integer("duration_minutes").notNull().default(30),
   perSlot: integer("per_slot").notNull().default(1),
   hours: jsonb("hours").$type<WeekHours>().notNull(),
+  /** Lembrete da visita para o cliente pelo WhatsApp. */
+  remindEnabled: boolean("remind_enabled").notNull().default(false),
+  remindHours: jsonb("remind_hours").$type<number[]>().notNull().default([24, 2]),
+  remindTemplate: text("remind_template"),
+  updatedAt: updatedAt(),
+});
+
+/** Follow-up: a IA retoma o cliente que parou de responder. */
+export type FollowupStep = { hours: number; text: string | null };
+export const followupSettings = pgTable("followup_settings", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  steps: jsonb("steps").$type<FollowupStep[]>().notNull(),
+  /** Janela permitida para enviar (horário de Brasília). */
+  windowStart: text("window_start").notNull().default("08:00"),
+  windowEnd: text("window_end").notNull().default("20:00"),
+  sundays: boolean("sundays").notNull().default(false),
   updatedAt: updatedAt(),
 });
 
@@ -679,7 +702,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 7 as const;
+export const schemaVersion = 8 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

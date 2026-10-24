@@ -92,10 +92,17 @@ test("catálogo, agenda e rodízio: cadastra, simula o agente, marca visita e co
   const cfg = page.getByRole("dialog", { name: "Horários e IA" });
   await cfg.getByLabel(/IA pode marcar visitas/).check();
   await cfg.getByLabel("Duração da visita (min)").fill("60");
+  await cfg.getByLabel(/Lembrar o cliente da visita/).check();
+  await cfg.getByLabel("Quantas horas antes").fill("24, 3");
   await cfg.getByRole("button", { name: "Salvar" }).click();
   await expect(cfg.getByText("Agenda salva.")).toBeVisible();
   await cfg.getByRole("button", { name: "Fechar" }).click();
   await expect(page.getByText("Visitas · o agente de IA pode marcar")).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Horários e IA" }).click();
+  await expect(cfg.getByLabel(/Lembrar o cliente da visita/)).toBeChecked();
+  await expect(cfg.getByLabel("Quantas horas antes")).toHaveValue("24, 3");
+  await cfg.getByRole("button", { name: "Fechar" }).click();
 
   // Agente mostra as ferramentas e usa no simulador
   await page.goto("/agente");
@@ -114,6 +121,21 @@ test("catálogo, agenda e rodízio: cadastra, simula o agente, marca visita e co
   await page.getByLabel("Mensagem de teste").fill(`pode marcar visita ${day} 10:00`);
   await page.getByRole("button", { name: "Enviar teste" }).click();
   await expect(sim).toContainText("(simulação: nada foi salvo)");
+
+  // Follow-up: liga, ajusta o 2º passo com texto fixo e confere depois de recarregar
+  const fu = page.getByTestId("followup");
+  await fu.getByLabel("Follow-up ligado").check();
+  await fu.getByLabel("Horas do 2º follow-up").fill("48");
+  await fu.getByLabel("Texto do 2º follow-up").fill("Oi {nome}, ainda procurando carro?");
+  await fu.getByRole("button", { name: "Adicionar follow-up" }).click();
+  await fu.getByLabel("Horas do 3º follow-up").fill("120");
+  await fu.getByRole("button", { name: "Salvar follow-up" }).click();
+  await expect(fu.getByText("Follow-up salvo.")).toBeVisible();
+  await page.reload();
+  await expect(fu.getByLabel("Follow-up ligado")).toBeChecked();
+  await expect(fu.getByLabel("Horas do 3º follow-up")).toHaveValue("120");
+  await expect(fu.getByLabel("Texto do 2º follow-up")).toHaveValue("Oi {nome}, ainda procurando carro?");
+  await expect(page.getByTestId("ferramentas-agente")).toContainText("24h, 48h, 120h sem resposta");
 
   // Marca uma visita na mão e registra o comparecimento
   await page.goto("/agenda");

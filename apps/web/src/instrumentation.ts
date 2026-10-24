@@ -2,6 +2,8 @@
  * Ao subir o servidor:
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
+ * - lembra os clientes das visitas (a cada 60 s);
+ * - follow-up: a IA retoma clientes que pararam de responder (a cada 60 s);
  * - envia as respostas agendadas do agente de IA (a cada 3 s).
  */
 export async function register() {
@@ -31,6 +33,18 @@ export async function register() {
         sending = false;
       }
     }, 5_000).unref?.();
+    let reminding = false;
+    setInterval(async () => {
+      if (reminding) return;
+      reminding = true;
+      try {
+        await core.processReminders(getDb(), evo);
+      } catch (e) {
+        console.error("[lembretes]", e);
+      } finally {
+        reminding = false;
+      }
+    }, 60_000).unref?.();
   }
 
   const {
@@ -64,4 +78,16 @@ export async function register() {
       running = false;
     }
   }, 3_000).unref?.();
+  let following = false;
+  setInterval(async () => {
+    if (following) return;
+    following = true;
+    try {
+      await core.processFollowups(getDb(), deps);
+    } catch (e) {
+      console.error("[follow-up]", e);
+    } finally {
+      following = false;
+    }
+  }, 60_000).unref?.();
 }
