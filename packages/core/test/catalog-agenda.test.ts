@@ -293,7 +293,12 @@ describe("rodízio e avisos", () => {
     expect(fake.sent.map((s) => s.to)).toEqual(["5548988880001", "5548988880001"]);
     expect(await processOutbox(db, evo)).toEqual({ found: 0, sent: 0 });
 
-    // Quem sai da equipe sai do rodízio.
+    // Ana respondendo o aviso pelo número da empresa: não vira lead nem gira o rodízio.
+    await say("ok, vou atender", "5548988880001");
+    expect(await db.select().from(deals)).toHaveLength(3);
+    expect(await db.select().from(notificationOutbox)).toHaveLength(2);
+
+    // Rodízio desligado: ninguém é escolhido.
     await db
       .update(users)
       .set({ phone: null })

@@ -3,7 +3,9 @@ import {
   conversations,
   type Database,
   type MessageStatus,
+  memberships,
   messages,
+  users,
   webhookEvents,
   type whatsappConnections,
 } from "@crm/db";
@@ -92,6 +94,23 @@ export async function upsertContactAndConversation(
 }
 
 /** Grava uma mensagem (recebida, ou enviada pelo celular). Ignora duplicadas pelo id do WhatsApp. */
+async function isTeamPhone(db: Database, organizationId: string, phone: string | null) {
+  if (!phone) return false;
+  const [hit] = await db
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(memberships, eq(memberships.userId, users.id))
+    .where(
+      and(
+        eq(memberships.organizationId, organizationId),
+        eq(memberships.active, true),
+        inArray(users.phone, phoneVariants(phone)),
+      ),
+    )
+    .limit(1);
+  return !!hit;
+}
+
 export async function storeParsedMessage(db: Database, c: Connection, p: ParsedMessage) {
   const { conversation, contact } = await upsertContactAndConversation(db, c, p);
   const [msg] = await db
@@ -129,7 +148,8 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     })
     .where(eq(conversations.id, conversation.id));
   // Lead novo entra sozinho no funil padrão.
-  if (!p.fromMe) {
+  // Quem escreve é alguém da equipe (ex.: respondendo um aviso): não vira lead nem recebe IA.
+  if (!p.fromMe && !(await isTeamPhone(db, c.organizationId, contact.phone))) {
     const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id);
     if (newDealId)
       await distributeLead(db, c.organizationId, newDealId, conversation.id, c.id, {
