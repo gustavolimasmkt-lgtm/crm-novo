@@ -7,6 +7,10 @@ export function getAi(): AiClient {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey)
     throw new AppError("integration", "A chave da IA (ANTHROPIC_API_KEY) não está configurada no servidor.");
-  cached ??= createAnthropicClient({ apiKey, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined });
+  cached ??= createAnthropicClient({
+    apiKey,
+    baseUrl: process.env.ANTHROPIC_BASE_URL || undefined,
+    workspaceId: process.env.ANTHROPIC_WORKSPACE_ID || undefined,
+  });
   return cached;
 }

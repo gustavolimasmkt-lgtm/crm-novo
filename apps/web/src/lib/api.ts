@@ -28,6 +28,13 @@ export function withOrg<P>(handler: (req: Request, ctx: ApiCtx, params: P) => Pr
           e.code === "forbidden" ? 403 : e.code === "not_found" ? 404 : e.code === "integration" ? 502 : 400;
         return Response.json({ error: e.message }, { status });
       }
+      if ((e as Error)?.name === "AiError") {
+        console.error(e);
+        return Response.json(
+          { error: `A IA não respondeu: ${(e as Error).message.replace(/^IA respondeu \d+: /, "")}` },
+          { status: 502 },
+        );
+      }
       if (e instanceof ZodError)
         return Response.json({ error: e.issues[0]?.message ?? "Dados inválidos." }, { status: 400 });
       console.error(e);

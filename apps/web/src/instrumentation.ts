@@ -15,14 +15,24 @@ export async function register() {
     core.processPendingEvents(getDb()).catch((e) => console.error("[reprocessador]", e));
   }, 30_000).unref?.();
 
-  const { EVOLUTION_API_URL, EVOLUTION_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL } = process.env;
+  const {
+    EVOLUTION_API_URL,
+    EVOLUTION_API_KEY,
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
+    ANTHROPIC_WORKSPACE_ID,
+  } = process.env;
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !ANTHROPIC_API_KEY) {
     console.warn("[agente] desligado: falta EVOLUTION_API_URL, EVOLUTION_API_KEY ou ANTHROPIC_API_KEY");
     return;
   }
   const deps = {
     evo: core.createEvolutionClient({ baseUrl: EVOLUTION_API_URL, apiKey: EVOLUTION_API_KEY }),
-    ai: core.createAnthropicClient({ apiKey: ANTHROPIC_API_KEY, baseUrl: ANTHROPIC_BASE_URL || undefined }),
+    ai: core.createAnthropicClient({
+      apiKey: ANTHROPIC_API_KEY,
+      baseUrl: ANTHROPIC_BASE_URL || undefined,
+      workspaceId: ANTHROPIC_WORKSPACE_ID || undefined,
+    }),
   };
   let running = false;
   setInterval(async () => {

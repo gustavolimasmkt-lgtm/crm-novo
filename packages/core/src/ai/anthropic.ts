@@ -43,6 +43,8 @@ export class AiError extends Error {
 export function createAnthropicClient(opts: {
   apiKey: string;
   baseUrl?: string;
+  /** Necessário quando a chave não está presa a um workspace da Anthropic. */
+  workspaceId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): AiClient {
@@ -58,6 +60,7 @@ export function createAnthropicClient(opts: {
             "content-type": "application/json",
             "x-api-key": opts.apiKey,
             "anthropic-version": "2023-06-01",
+            ...(opts.workspaceId ? { "anthropic-workspace-id": opts.workspaceId } : {}),
           },
           body: JSON.stringify({
             model,
