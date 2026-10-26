@@ -39,6 +39,9 @@ export async function saveFollowupAction(_: FormState, fd: FormData): Promise<Fo
       windowStart: str(fd, "windowStart") || "08:00",
       windowEnd: str(fd, "windowEnd") || "20:00",
       sundays: str(fd, "sundays") === "on",
+      gapMinSeconds: Number(str(fd, "gapMinSeconds") || 30),
+      gapMaxSeconds: Number(str(fd, "gapMaxSeconds") || 90),
+      dailyLimit: Number(str(fd, "dailyLimit") || 120),
     });
   } catch (e) {
     return toFormError(e);

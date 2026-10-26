@@ -57,6 +57,13 @@
       "when": 1792851337170,
       "tag": "0007_followup_lembretes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793004732846,
+      "tag": "0008_antibloqueio_tarefas_audio",
+      "breakpoints": true
     }
   ]
 }

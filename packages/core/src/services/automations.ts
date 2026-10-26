@@ -43,6 +43,9 @@ export async function getFollowupSettings(db: Database, organizationId: string) 
       windowStart: "08:00",
       windowEnd: "20:00",
       sundays: false,
+      gapMinSeconds: 30,
+      gapMaxSeconds: 90,
+      dailyLimit: 120,
       updatedAt: new Date(),
     }
   );
@@ -66,6 +69,14 @@ export const followupInput = z.object({
   windowStart: hhmm,
   windowEnd: hhmm,
   sundays: z.boolean().default(false),
+  gapMinSeconds: z.coerce.number().int().min(10, "Intervalo mínimo: 10 segundos.").max(3600).default(30),
+  gapMaxSeconds: z.coerce.number().int().min(10).max(3600).default(90),
+  dailyLimit: z.coerce
+    .number()
+    .int()
+    .min(1, "Limite por dia: pelo menos 1.")
+    .max(1000, "Limite por dia: no máximo 1000.")
+    .default(120),
 });
 
 export async function saveFollowupSettings(
@@ -79,6 +90,8 @@ export async function saveFollowupSettings(
   const input = followupInput.parse(raw);
   if (input.enabled && !input.steps.length)
     throw new AppError("validation", "Adicione pelo menos um follow-up.");
+  if (input.gapMinSeconds > input.gapMaxSeconds)
+    throw new AppError("validation", "O intervalo máximo precisa ser maior ou igual ao mínimo.");
   if (input.windowStart >= input.windowEnd)
     throw new AppError("validation", "O fim do horário de envio precisa ser depois do início.");
   const values = {
@@ -112,6 +125,28 @@ function fill(template: string, vars: Record<string, string>) {
     .trim();
 }
 
+/**
+ * Anti-bloqueio: reserva a vez de um envio automático no número (intervalo aleatório entre envios
+ * e limite por dia). Devolve false se ainda não é a vez ou se o limite do dia acabou.
+ */
+export async function reserveAutomatedSend(
+  db: Database,
+  connectionId: string,
+  p: { gapMinSeconds: number; gapMaxSeconds: number; dailyLimit: number },
+) {
+  const gap = p.gapMinSeconds + Math.random() * Math.max(0, p.gapMaxSeconds - p.gapMinSeconds);
+  const dayStart = new Date(`${brParts(new Date()).date}T00:00:00-03:00`);
+  const rows = await db.execute(sql`
+    update whatsapp_connections set next_automated_at = now() + make_interval(secs => ${gap})
+    where id = ${connectionId}::uuid
+      and (next_automated_at is null or next_automated_at <= now())
+      and (select count(*) from messages m where m.connection_id = ${connectionId}::uuid
+           and m.automation is not null and m.sent_at >= ${dayStart.toISOString()}::timestamptz) < ${p.dailyLimit}
+    returning id
+  `);
+  return rows.length > 0;
+}
+
 export type AutomationDeps = { evo: EvolutionApi; ai: AiClient };
 
 /** A IA escreve a retomada. Devolve null se ela achar que não faz sentido mandar. */
@@ -134,9 +169,10 @@ async function writeFollowup(
       type: messages.type,
       body: messages.body,
       mediaName: messages.mediaName,
+      transcript: messages.transcript,
     })
     .from(messages)
-    .where(eq(messages.conversationId, conversationId))
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.internal, false)))
     .orderBy(desc(messages.createdAt))
     .limit(agent.historyMessages);
   const turns: ChatMessage[] = toChatTurns(rows.reverse());
@@ -169,6 +205,7 @@ export async function processFollowups(db: Database, deps: AutomationDeps, limit
   const due = await db.execute<{
     id: string;
     organization_id: string;
+    connection_id: string;
     followup_count: number;
     last_message_at: string;
     hours: number;
@@ -176,11 +213,14 @@ export async function processFollowups(db: Database, deps: AutomationDeps, limit
     window_start: string;
     window_end: string;
     sundays: boolean;
+    gap_min_seconds: number;
+    gap_max_seconds: number;
+    daily_limit: number;
   }>(sql`
-    select c.id, c.organization_id, c.followup_count, c.last_message_at,
+    select c.id, c.organization_id, c.connection_id, c.followup_count, c.last_message_at,
            (fs.steps -> c.followup_count ->> 'hours')::int as hours,
            fs.steps -> c.followup_count ->> 'text' as text,
-           fs.window_start, fs.window_end, fs.sundays
+           fs.window_start, fs.window_end, fs.sundays, fs.gap_min_seconds, fs.gap_max_seconds, fs.daily_limit
     from conversations c
     join followup_settings fs on fs.organization_id = c.organization_id and fs.enabled
     join ai_agents a on a.organization_id = c.organization_id and a.active
@@ -190,7 +230,7 @@ export async function processFollowups(db: Database, deps: AutomationDeps, limit
       and (a.connection_id is null or a.connection_id = c.connection_id)
       and c.followup_count < jsonb_array_length(fs.steps)
       and c.last_message_at < now() - make_interval(hours => (fs.steps -> c.followup_count ->> 'hours')::int)
-      and (select m.sent_by_ai from messages m where m.conversation_id = c.id
+      and (select m.sent_by_ai from messages m where m.conversation_id = c.id and not m.internal
            order by m.created_at desc limit 1)
       and exists (select 1 from messages m where m.conversation_id = c.id and m.direction = 'in')
       and not exists (select 1 from ai_jobs j where j.conversation_id = c.id)
@@ -208,6 +248,12 @@ export async function processFollowups(db: Database, deps: AutomationDeps, limit
   for (const row of due) {
     if (!inWindow({ windowStart: row.window_start, windowEnd: row.window_end, sundays: row.sundays }))
       continue;
+    const pace = {
+      gapMinSeconds: row.gap_min_seconds,
+      gapMaxSeconds: row.gap_max_seconds,
+      dailyLimit: row.daily_limit,
+    };
+    if (!(await reserveAutomatedSend(db, row.connection_id, pace))) continue;
     // Reserva: só um processo envia este passo.
     const claimed = await db
       .update(conversations)
@@ -231,7 +277,10 @@ export async function processFollowups(db: Database, deps: AutomationDeps, limit
         out.push({ conversationId: row.id, result: usage.exhausted ? "sem-creditos" : "nao-enviado" });
         continue;
       }
-      await sendAiMessage(db, deps.evo, row.organization_id, row.id, text);
+      await sendAiMessage(db, deps.evo, row.organization_id, row.id, text, {
+        automation: "followup",
+        typing: true,
+      });
       out.push({ conversationId: row.id, result: `enviado-${row.followup_count + 1}` });
     } catch (e) {
       console.error(`[follow-up] conversa ${row.id}:`, (e as Error)?.message ?? e);
@@ -289,6 +338,13 @@ export async function processReminders(db: Database, evo: EvolutionApi, limit = 
     // Marcada depois do ponto do lembrete (ex.: marcou 3 h antes): o de 24 h não faz sentido.
     const skip = created > start.getTime() - h * HOUR;
     const next = [...sent, ...due];
+    // Anti-bloqueio (lembrete pulado não precisa esperar a vez).
+    let connId: string | null = null;
+    if (!skip) {
+      const pace = await getFollowupSettings(db, a.organization_id);
+      connId = await preferredConnection(db, a.organization_id, a.contact_id, a.connection_id);
+      if (!connId || !(await reserveAutomatedSend(db, connId, pace))) continue;
+    }
     const claimed = await db
       .update(appointments)
       .set({ remindersSent: next })
@@ -305,13 +361,13 @@ export async function processReminders(db: Database, evo: EvolutionApi, limit = 
       const org = await db.query.organizations.findFirst({ where: eq(organizations.id, a.organization_id) });
       const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, a.contact_id) });
       if (!contact) throw new Error("contato não encontrado");
-      const convId = await conversationFor(db, a.organization_id, contact, a.connection_id);
+      const convId = await conversationFor(db, a.organization_id, contact, connId);
       const text = fill(a.remind_template || DEFAULT_REMINDER, {
         nome: firstName(contact),
         quando: whenText(start),
         empresa: org?.name ?? "",
       });
-      await sendAiMessage(db, evo, a.organization_id, convId, text);
+      await sendAiMessage(db, evo, a.organization_id, convId, text, { automation: "reminder", typing: true });
       if (a.assigned_user_id && h === Math.min(...(a.remind_hours ?? [h])))
         await notifyUser(
           db,
@@ -366,4 +422,22 @@ async function conversationFor(
     verified: false,
   });
   return conversation.id;
+}
+
+/** Conexão aberta que o lembrete vai usar (a da conversa do contato, a da visita ou qualquer aberta). */
+async function preferredConnection(
+  db: Database,
+  organizationId: string,
+  contactId: string,
+  connectionId: string | null,
+) {
+  const [row] = await db.execute<{ id: string }>(sql`
+    select w.id from whatsapp_connections w
+    where w.organization_id = ${organizationId}::uuid and w.status = 'open' and w.active
+    order by (exists (select 1 from conversations c where c.contact_id = ${contactId}::uuid
+                      and c.connection_id = w.id)) desc,
+             (w.id = ${connectionId ?? "00000000-0000-0000-0000-000000000000"}::uuid) desc
+    limit 1
+  `);
+  return row?.id ?? null;
 }

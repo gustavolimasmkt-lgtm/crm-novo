@@ -13,6 +13,7 @@ import {
 } from "@crm/db";
 import { and, desc, eq, ilike, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
+import type { Transcriber } from "../ai/transcribe.js";
 import { type Actor, can } from "../auth/permissions.js";
 import {
   type EvolutionApi,
@@ -137,6 +138,8 @@ export type MessageItem = {
   sentAt: Date;
   sentByName: string | null;
   sentByAi: boolean;
+  internal: boolean;
+  transcript: string | null;
 };
 
 export async function listMessages(
@@ -160,6 +163,8 @@ export async function listMessages(
       sentAt: messages.sentAt,
       sentByName: users.name,
       sentByAi: messages.sentByAi,
+      internal: messages.internal,
+      transcript: messages.transcript,
     })
     .from(messages)
     .leftJoin(users, eq(users.id, messages.sentByUserId))
@@ -362,11 +367,17 @@ async function deliver(
   messageId: string,
   instanceName: string,
   to: string,
-  m: { type: MessageType; text: string | null; file?: { name: string; mime: string; data: Buffer } },
+  m: {
+    type: MessageType;
+    text: string | null;
+    file?: { name: string; mime: string; data: Buffer };
+    delay?: number;
+  },
 ) {
   try {
     let r: Awaited<ReturnType<EvolutionApi["sendText"]>>;
-    if (!m.file) r = await evo.sendText(instanceName, to, m.text ?? "");
+    if (!m.file)
+      r = await evo.sendText(instanceName, to, m.text ?? "", m.delay ? { delay: m.delay } : undefined);
     else if (m.type === "audio") r = await evo.sendAudio(instanceName, to, m.file.data.toString("base64"));
     else
       r = await evo.sendMedia(instanceName, to, {
@@ -445,6 +456,11 @@ export async function getMessageMedia(
   });
   if (!msg) throw new AppError("not_found", "Mídia não encontrada.");
   await getConversation(db, actor, organizationId, msg.conversationId);
+  return loadMessageMedia(db, evo, msg);
+}
+
+/** Mídia da mensagem (sem checar permissão): usa o cache ou baixa da Evolution e guarda. */
+async function loadMessageMedia(db: Database, evo: EvolutionApi, msg: typeof messages.$inferSelect) {
   const cached = await db.query.messageMedia.findFirst({ where: eq(messageMedia.messageId, msg.id) });
   if (cached) return { mime: cached.mime, fileName: cached.fileName, data: cached.data };
   if (!msg.raw) throw new AppError("not_found", "Mídia não disponível.");
@@ -573,8 +589,15 @@ export async function sendAiMessage(
   organizationId: string,
   conversationId: string,
   text: string,
-  image?: { name: string; mime: string; data: Buffer },
+  opts: {
+    image?: { name: string; mime: string; data: Buffer };
+    /** Envio automático (follow-up, lembrete): conta no limite anti-bloqueio. */
+    automation?: string;
+    /** Mostra "digitando..." antes, proporcional ao tamanho do texto. */
+    typing?: boolean;
+  } = {},
 ) {
+  const { image } = opts;
   const conv = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.organizationId, organizationId)),
   });
@@ -599,6 +622,7 @@ export async function sendAiMessage(
       mediaName: image?.name ?? null,
       status: "pending",
       sentByAi: true,
+      automation: opts.automation ?? null,
     })
     .returning();
   if (!msg) throw new Error("Falha ao gravar mensagem");
@@ -621,6 +645,69 @@ export async function sendAiMessage(
     type,
     text: text || null,
     file: image,
+    delay: opts.typing && !image ? Math.min(6000, 1000 + text.length * 25) : undefined,
   });
   return msg.id;
+}
+
+/** Nota interna na conversa: só a equipe vê; não vai para o WhatsApp nem para a IA. */
+export async function addNote(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  conversationId: string,
+  text: string,
+) {
+  const conv = await getConversation(db, actor, organizationId, conversationId);
+  const body = text.trim();
+  if (!body) throw new AppError("validation", "Escreva a nota.");
+  if (body.length > 4000) throw new AppError("validation", "Nota longa demais (máximo 4000 caracteres).");
+  const [m] = await db
+    .insert(messages)
+    .values({
+      organizationId,
+      conversationId: conv.id,
+      connectionId: conv.connectionId,
+      direction: "out",
+      type: "text",
+      body,
+      status: "sent",
+      internal: true,
+      sentByUserId: actor.userId,
+    })
+    .returning({ id: messages.id });
+  await notifyOrg(db, { o: organizationId, t: "message", c: conv.id });
+  return m?.id ?? null;
+}
+
+/**
+ * Transcreve um áudio (e guarda). Com actor, confere a permissão de ver a conversa.
+ * Devolve o texto ou null se não for áudio.
+ */
+export async function transcribeMessage(
+  db: Database,
+  evo: EvolutionApi,
+  stt: Transcriber,
+  organizationId: string,
+  messageId: string,
+  actor: ActorU | null = null,
+) {
+  if (!/^[0-9a-f-]{36}$/i.test(messageId)) throw new AppError("not_found", "Mensagem não encontrada.");
+  const msg = await db.query.messages.findFirst({
+    where: and(eq(messages.id, messageId), eq(messages.organizationId, organizationId)),
+  });
+  if (!msg) throw new AppError("not_found", "Mensagem não encontrada.");
+  if (actor) await getConversation(db, actor, organizationId, msg.conversationId);
+  if (msg.type !== "audio") return null;
+  if (msg.transcript) return msg.transcript;
+  const media = await loadMessageMedia(db, evo, msg);
+  const text = (await stt.transcribe(media.data, media.mime, media.fileName ?? "audio.ogg"))
+    .trim()
+    .slice(0, 8000);
+  await db
+    .update(messages)
+    .set({ transcript: text || "(áudio sem fala)" })
+    .where(eq(messages.id, msg.id));
+  await notifyOrg(db, { o: organizationId, t: "message", c: msg.conversationId });
+  return text || "(áudio sem fala)";
 }

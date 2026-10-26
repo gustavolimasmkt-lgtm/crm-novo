@@ -12,6 +12,7 @@ export type FakeAnthropic = {
   url: string;
   requests: Record<string, unknown>[];
   failNext: number;
+  transcriptions: number;
   close(): Promise<void>;
 };
 
@@ -21,6 +22,7 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
     url: "",
     requests,
     failNext: 0,
+    transcriptions: 0,
     close: () => new Promise((r) => server.close(() => r())),
   };
   const server: Server = createServer((req, res) => {
@@ -33,6 +35,13 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
         res.writeHead(status, { "content-type": "application/json" });
         res.end(JSON.stringify(json));
       };
+      // Transcrição (API compatível com a da OpenAI).
+      if (req.method === "POST" && req.url === "/v1/audio/transcriptions") {
+        if (!String(req.headers.authorization ?? "").startsWith("Bearer "))
+          return send(401, { error: { message: "sem chave" } });
+        api.transcriptions++;
+        return send(200, { text: "quero ver o hrv prata amanhã" });
+      }
       if (req.method !== "POST" || req.url !== "/v1/messages") return send(404, {});
       if (!req.headers["x-api-key"]) return send(401, { error: { message: "sem chave" } });
       if (api.failNext > 0) {

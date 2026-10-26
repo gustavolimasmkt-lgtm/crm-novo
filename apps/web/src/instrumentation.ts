@@ -2,8 +2,8 @@
  * Ao subir o servidor:
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
- * - lembra os clientes das visitas (a cada 60 s);
- * - follow-up: a IA retoma clientes que pararam de responder (a cada 60 s);
+ * - lembra os clientes das visitas e avisa tarefas na hora (a cada 20 s);
+ * - follow-up: a IA retoma clientes que pararam de responder (a cada 20 s, respeitando o anti-bloqueio);
  * - envia as respostas agendadas do agente de IA (a cada 3 s).
  */
 export async function register() {
@@ -39,12 +39,13 @@ export async function register() {
       reminding = true;
       try {
         await core.processReminders(getDb(), evo);
+        await core.processTaskAlerts(getDb());
       } catch (e) {
         console.error("[lembretes]", e);
       } finally {
         reminding = false;
       }
-    }, 60_000).unref?.();
+    }, 20_000).unref?.();
   }
 
   const {
@@ -65,6 +66,13 @@ export async function register() {
       baseUrl: ANTHROPIC_BASE_URL || undefined,
       workspaceId: ANTHROPIC_WORKSPACE_ID || undefined,
     }),
+    stt: process.env.TRANSCRIBE_API_KEY
+      ? core.createTranscriber({
+          apiKey: process.env.TRANSCRIBE_API_KEY,
+          baseUrl: process.env.TRANSCRIBE_BASE_URL || undefined,
+          model: process.env.TRANSCRIBE_MODEL || undefined,
+        })
+      : undefined,
   };
   let running = false;
   setInterval(async () => {
@@ -89,5 +97,5 @@ export async function register() {
     } finally {
       following = false;
     }
-  }, 60_000).unref?.();
+  }, 20_000).unref?.();
 }

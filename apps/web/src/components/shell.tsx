@@ -8,6 +8,7 @@ import {
   Crown,
   Home,
   KanbanSquare,
+  ListTodo,
   LogOut,
   Menu,
   MessageCircle,
@@ -16,6 +17,7 @@ import {
   Smartphone,
   UserRound,
   Users,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -50,8 +52,10 @@ export function Shell({
     { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} />, primary: true },
     { href: "/crm", label: "CRM", icon: <KanbanSquare size={20} />, primary: true },
     { href: "/contatos", label: "Contatos", icon: <UserRound size={20} />, primary: true },
+    { href: "/tarefas", label: "Tarefas", icon: <ListTodo size={20} /> },
     { href: "/agenda", label: "Agenda", icon: <CalendarDays size={20} /> },
     { href: "/catalogo", label: "Catálogo", icon: <Package size={20} /> },
+    { href: "/respostas", label: "Respostas rápidas", icon: <Zap size={20} /> },
     ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
     ...(canManageConnections
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]

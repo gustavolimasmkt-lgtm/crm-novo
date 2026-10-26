@@ -94,3 +94,9 @@ npx playwright test
 
 - `getDashboard` (packages/core/src/services/dashboard.ts): consultas SQL diretas, sem cache. Leads = negociações criadas no período; vendas = negociações ganhas com `closed_at` no período.
 - Gestor (`reports.view`) vê a empresa ou uma pessoa; vendedor vê só os próprios números.
+
+## Produtividade e áudio
+
+- Respostas rápidas (`/respostas`), notas internas (`messages.internal`), tarefas (`/tarefas`, aviso por timer de 20 s).
+- Anti-bloqueio: `reserveAutomatedSend` reserva a vez no número (`whatsapp_connections.next_automated_at`) e conta `messages.automation` do dia.
+- Transcrição de áudio (opcional): `TRANSCRIBE_API_KEY`; para Groq, `TRANSCRIBE_BASE_URL=https://api.groq.com/openai/v1` e `TRANSCRIBE_MODEL=whisper-large-v3-turbo`. Sem essas variáveis usa OpenAI (`whisper-1`).

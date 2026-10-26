@@ -28,7 +28,15 @@ export type FakeEvolution = {
   failSends: boolean;
   incoming(
     name: string,
-    msg: { from: string; text?: string; id?: string; pushName?: string; image?: boolean; fromMe?: boolean },
+    msg: {
+      from: string;
+      text?: string;
+      id?: string;
+      pushName?: string;
+      image?: boolean;
+      audio?: boolean;
+      fromMe?: boolean;
+    },
   ): Promise<string>;
   ack(name: string, id: string, status: "DELIVERY_ACK" | "READ"): Promise<void>;
   scan(name: string, phone?: string, notify?: boolean): Promise<void>;
@@ -98,7 +106,7 @@ export async function startFakeEvolution(
       return send(200, { ok: true, instance: latest });
     }
     if (req.method === "POST" && path === "/__test/incoming") {
-      const b = ((await body(req)) ?? {}) as { text?: string; from?: string };
+      const b = ((await body(req)) ?? {}) as { text?: string; from?: string; audio?: boolean };
       const latest = [...instances.entries()]
         .filter(([n, i]) => n.startsWith("crm_") && i.state === "open")
         .at(-1)?.[0];
@@ -106,6 +114,7 @@ export async function startFakeEvolution(
       const id = await api.incoming(latest, {
         from: b.from ?? "5511988887777",
         text: b.text ?? "Olá!",
+        audio: b.audio === true,
         pushName: "Cliente Teste",
       });
       return send(200, { ok: true, id });
@@ -257,14 +266,16 @@ export async function startFakeEvolution(
     failSends: false,
     async incoming(name, msg) {
       const id = msg.id ?? `IN${++seq}`;
-      const message = msg.image
-        ? { imageMessage: { mimetype: "image/jpeg", caption: msg.text ?? null } }
-        : { conversation: msg.text ?? "" };
+      const message = msg.audio
+        ? { audioMessage: { mimetype: "audio/ogg; codecs=opus", seconds: 4, ptt: true } }
+        : msg.image
+          ? { imageMessage: { mimetype: "image/jpeg", caption: msg.text ?? null } }
+          : { conversation: msg.text ?? "" };
       await notify(name, "messages.upsert", {
         key: { id, remoteJid: `${msg.from}@s.whatsapp.net`, fromMe: msg.fromMe === true },
         pushName: msg.pushName ?? null,
         message,
-        messageType: msg.image ? "imageMessage" : "conversation",
+        messageType: msg.audio ? "audioMessage" : msg.image ? "imageMessage" : "conversation",
         messageTimestamp: Math.floor(Date.now() / 1000),
       });
       return id;

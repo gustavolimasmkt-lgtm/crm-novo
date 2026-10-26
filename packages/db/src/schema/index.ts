@@ -201,6 +201,8 @@ export const whatsappConnections = pgTable(
     /** SHA-256 do segredo que a Evolution envia no endereço do webhook. */
     webhookTokenHash: text("webhook_token_hash").notNull(),
     connectedAt: timestamp("connected_at", { withTimezone: true }),
+    /** Próximo envio automático permitido (anti-bloqueio). */
+    nextAutomatedAt: timestamp("next_automated_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -338,6 +340,12 @@ export const messages = pgTable(
     sentByUserId: uuid("sent_by_user_id").references(() => users.id, { onDelete: "set null" }),
     /** Enviada pelo agente de IA. */
     sentByAi: boolean("sent_by_ai").notNull().default(false),
+    /** Nota interna da equipe: não vai para o WhatsApp nem para a IA. */
+    internal: boolean("internal").notNull().default(false),
+    /** Texto do áudio (transcrição). */
+    transcript: text("transcript"),
+    /** Envio automático (follow-up, lembrete): conta no limite anti-bloqueio. */
+    automation: text("automation"),
     /** Mensagem original do WhatsApp (necessária para baixar a mídia depois). */
     raw: jsonb("raw"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
@@ -665,8 +673,55 @@ export const followupSettings = pgTable("followup_settings", {
   windowStart: text("window_start").notNull().default("08:00"),
   windowEnd: text("window_end").notNull().default("20:00"),
   sundays: boolean("sundays").notNull().default(false),
+  /** Proteção contra bloqueio: intervalo aleatório entre envios automáticos e limite por dia, por número. */
+  gapMinSeconds: integer("gap_min_seconds").notNull().default(30),
+  gapMaxSeconds: integer("gap_max_seconds").notNull().default(90),
+  dailyLimit: integer("daily_limit").notNull().default(120),
   updatedAt: updatedAt(),
 });
+
+/** Respostas rápidas (atalho "/" no campo de mensagem). */
+export const quickReplies = pgTable(
+  "quick_replies",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    shortcut: text("shortcut").notNull(),
+    body: text("body").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("quick_replies_org_shortcut_uq").on(t.organizationId, t.shortcut)],
+);
+
+/** Tarefas da equipe (ligar, mandar proposta...), com aviso no WhatsApp na hora. */
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    notes: text("notes"),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("tasks_org_assignee_idx").on(t.organizationId, t.assignedUserId, t.dueAt),
+    index("tasks_deal_idx").on(t.dealId),
+  ],
+);
 
 /** Rodízio de vendedores: quem recebe os leads novos, em ordem. */
 export const leadRotation = pgTable("lead_rotation", {
@@ -702,7 +757,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 8 as const;
+export const schemaVersion = 9 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

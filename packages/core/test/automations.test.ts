@@ -45,6 +45,16 @@ beforeEach(async () => {
 });
 
 const H = 3600_000;
+// O anti-bloqueio segura envios seguidos no mesmo número; aqui cada passo é testado isolado.
+const free = () => db.update(whatsappConnections).set({ nextAutomatedAt: null });
+const followups = async (deps: { evo: typeof evo; ai: typeof ai }) => {
+  await free();
+  return processFollowups(db, deps);
+};
+const reminders = async () => {
+  await free();
+  return processReminders(db, evo);
+};
 const ALWAYS = { windowStart: "00:00", windowEnd: "23:59", sundays: true };
 
 async function setup() {
@@ -102,21 +112,21 @@ describe("follow-up", () => {
     await say("oi");
     await processAiJobs(db, deps);
     expect(lastText()).toBe("Resposta automática: oi");
-    expect(await processFollowups(db, deps)).toEqual([]);
+    expect(await followups(deps)).toEqual([]);
 
     await silence(25);
-    expect((await processFollowups(db, deps)).map((r) => r.result)).toEqual(["enviado-1"]);
+    expect((await followups(deps)).map((r) => r.result)).toEqual(["enviado-1"]);
     expect(lastText()).toBe("Oi! Ainda tem interesse? Posso ajudar?");
     const req = fakeAi.requests.at(-1) as { messages: { content: string }[]; tools?: unknown };
     expect(req.tools).toBeUndefined();
     expect(req.messages.at(-1)?.content).toContain("não responde há 25 horas");
-    expect(await processFollowups(db, deps)).toEqual([]); // conta a partir do follow-up
+    expect(await followups(deps)).toEqual([]); // conta a partir do follow-up
 
     await silence(73);
-    expect((await processFollowups(db, deps)).map((r) => r.result)).toEqual(["enviado-2"]);
+    expect((await followups(deps)).map((r) => r.result)).toEqual(["enviado-2"]);
     expect(lastText()).toBe("Oi Joana, ainda procurando carro?");
     await silence(1000);
-    expect(await processFollowups(db, deps)).toEqual([]);
+    expect(await followups(deps)).toEqual([]);
 
     await say("sim, ainda quero");
     const [c] = await db.select().from(conversations);
@@ -136,7 +146,7 @@ describe("follow-up", () => {
     // Vendedor falou por último (pelo celular): a IA não manda follow-up.
     await phoneSays("Joana, te ligo amanhã");
     await silence(30);
-    expect(await processFollowups(db, deps)).toEqual([]);
+    expect(await followups(deps)).toEqual([]);
 
     // Cliente se despediu: a IA decide não mandar (e o passo é consumido).
     await db
@@ -147,7 +157,7 @@ describe("follow-up", () => {
     await processAiJobs(db, deps);
     await silence(30);
     fake.sent.length = 0;
-    expect((await processFollowups(db, deps)).map((r) => r.result)).toEqual(["nao-enviado"]);
+    expect((await followups(deps)).map((r) => r.result)).toEqual(["nao-enviado"]);
     expect(fake.sent).toHaveLength(0);
 
     // Fora da janela de envio: espera.
@@ -161,7 +171,7 @@ describe("follow-up", () => {
       sundays: true,
     });
     await silence(30);
-    expect(await processFollowups(db, deps)).toEqual([]);
+    expect(await followups(deps)).toEqual([]);
 
     // Com visita marcada no futuro: não cobra.
     await saveFollowupSettings(db, admin, org.id, {
@@ -175,9 +185,9 @@ describe("follow-up", () => {
       date: brParts(later).date,
       time: brParts(later).time,
     });
-    expect(await processFollowups(db, deps)).toEqual([]);
+    expect(await followups(deps)).toEqual([]);
     await db.delete(appointments);
-    expect((await processFollowups(db, deps)).map((r) => r.result)).toEqual(["enviado-1"]);
+    expect((await followups(deps)).map((r) => r.result)).toEqual(["enviado-1"]);
   });
 
   it("janela: domingo e horário", () => {
@@ -215,18 +225,18 @@ describe("lembretes de visita", () => {
       .set({ createdAt: new Date(Date.now() - 48 * H) })
       .where(eq(appointments.id, id));
     fake.sent.length = 0;
-    expect((await processReminders(db, evo)).map((r) => r.result)).toEqual(["lembrete-24h"]);
+    expect((await reminders()).map((r) => r.result)).toEqual(["lembrete-24h"]);
     expect(lastText()).toMatch(
       /^Oi Joana! Passando para lembrar da sua visita (hoje|amanhã) às \d\d:\d\d na Loja\./,
     );
-    expect(await processReminders(db, evo)).toEqual([]);
+    expect(await reminders()).toEqual([]);
     expect(await db.select().from(notificationOutbox)).toHaveLength(0);
 
     await db
       .update(appointments)
       .set({ startsAt: new Date(Date.now() + 90 * 60_000) })
       .where(eq(appointments.id, id));
-    expect((await processReminders(db, evo)).map((r) => r.result)).toEqual(["lembrete-2h"]);
+    expect((await reminders()).map((r) => r.result)).toEqual(["lembrete-2h"]);
     expect(lastText()).toContain("hoje às");
     const [aviso] = await db.select().from(notificationOutbox);
     expect(aviso?.body).toContain("VISITA HOJE ÀS");
@@ -242,13 +252,13 @@ describe("lembretes de visita", () => {
       date: brParts(soon).date,
       time: brParts(soon).time,
     });
-    expect((await processReminders(db, evo)).map((r) => r.result)).toEqual(["pulado"]);
+    expect((await reminders()).map((r) => r.result)).toEqual(["pulado"]);
     await db
       .update(appointments)
       .set({ startsAt: sql`now() + interval '100 minutes'`, createdAt: sql`now() - interval '80 minutes'` })
       .where(sql`${appointments.id} <> ${id}`);
     fake.sent.length = 0;
-    expect((await processReminders(db, evo)).map((r) => r.result)).toEqual(["lembrete-2h"]);
+    expect((await reminders()).map((r) => r.result)).toEqual(["lembrete-2h"]);
     expect(fake.sent[0]?.to).toBe("5548997771234");
     expect(lastText()).toContain("Oi Pedro!");
   });

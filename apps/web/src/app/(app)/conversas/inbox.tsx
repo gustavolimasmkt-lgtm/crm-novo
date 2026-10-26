@@ -13,11 +13,22 @@ import {
   Paperclip,
   Search,
   SendHorizontal,
+  StickyNote,
   User,
   X,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type FormEvent,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime } from "@/lib/format";
 
@@ -53,7 +64,26 @@ type Msg = {
   sentAt: string;
   sentByName: string | null;
   sentByAi: boolean;
+  internal: boolean;
+  transcript: string | null;
 };
+type QuickReply = { id: string; shortcut: string; body: string };
+
+/** Recursos extras da caixa de entrada (respostas rápidas, transcrição). */
+const Extras = createContext<{ quickReplies: QuickReply[]; sttEnabled: boolean }>({
+  quickReplies: [],
+  sttEnabled: false,
+});
+
+function fillReply(body: string, contactName: string) {
+  const first = contactName.trim().split(/\s+/)[0] ?? "";
+  const name = /^[\p{L}'-]{2,}$/u.test(first) ? first : "";
+  return body
+    .replace(/\{nome\}/gi, name)
+    .replace(/ +([!,.?])/g, "$1")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
 type Connection = { id: string; name: string; phone: string | null; status: string };
 type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
 type ThreadData = { conversation: Conv; messages: Msg[]; deal: DealChip | null };
@@ -83,6 +113,8 @@ export function Inbox({
   canViewAll,
   canManageConnections,
   agentActive,
+  quickReplies = [],
+  sttEnabled = false,
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -92,7 +124,10 @@ export function Inbox({
   canViewAll: boolean;
   canManageConnections: boolean;
   agentActive: boolean;
+  quickReplies?: QuickReply[];
+  sttEnabled?: boolean;
 }) {
+  const extras = useMemo(() => ({ quickReplies, sttEnabled }), [quickReplies, sttEnabled]);
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
   const [list, setList] = useState<Conv[]>(initial);
@@ -168,186 +203,188 @@ export function Inbox({
   const noConnection = connections.length === 0;
 
   return (
-    <div className="md:-mx-4 md:-mt-4">
-      <div className="flex overflow-hidden md:h-[calc(100dvh-6rem)] md:rounded-[var(--radius-card)] md:bg-surface">
-        {/* Lista */}
-        <section
-          className={cx("flex w-full flex-col md:w-[360px] md:shrink-0 md:border-r md:border-separator")}
-          aria-label="Lista de conversas"
-        >
-          <div className="space-y-3 pb-3 md:p-4">
-            <div className="flex items-center justify-between">
-              <h1 className="large-title md:text-[28px]">Conversas</h1>
-              <div className="flex items-center gap-2">
-                <span
-                  className={cx("h-2 w-2 rounded-full", live ? "bg-ok" : "bg-ink-3")}
-                  title={live ? "Atualizando em tempo real" : "Reconectando…"}
+    <Extras.Provider value={extras}>
+      <div className="md:-mx-4 md:-mt-4">
+        <div className="flex overflow-hidden md:h-[calc(100dvh-6rem)] md:rounded-[var(--radius-card)] md:bg-surface">
+          {/* Lista */}
+          <section
+            className={cx("flex w-full flex-col md:w-[360px] md:shrink-0 md:border-r md:border-separator")}
+            aria-label="Lista de conversas"
+          >
+            <div className="space-y-3 pb-3 md:p-4">
+              <div className="flex items-center justify-between">
+                <h1 className="large-title md:text-[28px]">Conversas</h1>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cx("h-2 w-2 rounded-full", live ? "bg-ok" : "bg-ink-3")}
+                    title={live ? "Atualizando em tempo real" : "Reconectando…"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNew(true)}
+                    disabled={noConnection}
+                    className="rounded-full p-2 text-accent hover:bg-accent-soft disabled:opacity-40"
+                    aria-label="Nova conversa"
+                    title="Nova conversa"
+                  >
+                    <MessageSquarePlus size={22} />
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowNew(true)}
-                  disabled={noConnection}
-                  className="rounded-full p-2 text-accent hover:bg-accent-soft disabled:opacity-40"
-                  aria-label="Nova conversa"
-                  title="Nova conversa"
-                >
-                  <MessageSquarePlus size={22} />
-                </button>
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar nome ou número"
+                  className="h-9 pl-9"
+                  aria-label="Buscar conversas"
+                />
+              </div>
+              <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === f.id}
+                    onClick={() => setFilter(f.id)}
+                    className={cx(
+                      "h-8 shrink-0 rounded-full px-3 text-[13px] font-medium",
+                      filter === f.id ? "bg-ink text-bg" : "bg-fill text-ink-2 hover:bg-fill-strong",
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="relative">
-              <Search
-                size={16}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
-              />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar nome ou número"
-                className="h-9 pl-9"
-                aria-label="Buscar conversas"
-              />
-            </div>
-            <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === f.id}
-                  onClick={() => setFilter(f.id)}
-                  className={cx(
-                    "h-8 shrink-0 rounded-full px-3 text-[13px] font-medium",
-                    filter === f.id ? "bg-ink text-bg" : "bg-fill text-ink-2 hover:bg-fill-strong",
+
+            {noConnection && (
+              <div className="px-1 pb-3 md:px-4">
+                <Notice tone="accent">
+                  Nenhum WhatsApp conectado.{" "}
+                  {canManageConnections ? (
+                    <Link href="/conexoes" className="font-semibold underline">
+                      Conectar agora
+                    </Link>
+                  ) : (
+                    "Peça ao administrador para conectar."
                   )}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {noConnection && (
-            <div className="px-1 pb-3 md:px-4">
-              <Notice tone="accent">
-                Nenhum WhatsApp conectado.{" "}
-                {canManageConnections ? (
-                  <Link href="/conexoes" className="font-semibold underline">
-                    Conectar agora
-                  </Link>
-                ) : (
-                  "Peça ao administrador para conectar."
-                )}
-              </Notice>
-            </div>
-          )}
-
-          <ul className="flex-1 divide-y divide-separator overflow-y-auto rounded-[var(--radius-card)] bg-surface md:rounded-none">
-            {list.length === 0 && (
-              <li className="px-6 py-12 text-center text-[15px] text-ink-2">
-                {q ? "Nada encontrado." : "Nenhuma conversa aqui."}
-              </li>
+                </Notice>
+              </div>
             )}
-            {list.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  data-testid="conversation-item"
-                  onClick={() => setSelected(c.id)}
-                  className={cx(
-                    "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-                    selected === c.id ? "bg-accent-soft" : "hover:bg-fill",
-                  )}
-                >
-                  <Avatar name={contactLabel(c)} size={44} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span
-                        className={cx(
-                          "truncate text-[16px]",
-                          c.unreadCount > 0 ? "font-semibold" : "font-medium",
-                        )}
-                      >
-                        {contactLabel(c)}
-                      </span>
-                      <span
-                        className={cx(
-                          "shrink-0 text-[12px]",
-                          c.unreadCount > 0 ? "text-accent" : "text-ink-3",
-                        )}
-                      >
-                        {listTime(c.lastMessageAt)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[14px] text-ink-2">
-                        {c.lastMessageFromMe ? "Você: " : ""}
-                        {c.lastMessagePreview || "Sem mensagens"}
-                      </span>
-                      {c.unreadCount > 0 && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-semibold text-white">
-                          {c.unreadCount}
+
+            <ul className="flex-1 divide-y divide-separator overflow-y-auto rounded-[var(--radius-card)] bg-surface md:rounded-none">
+              {list.length === 0 && (
+                <li className="px-6 py-12 text-center text-[15px] text-ink-2">
+                  {q ? "Nada encontrado." : "Nenhuma conversa aqui."}
+                </li>
+              )}
+              {list.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    data-testid="conversation-item"
+                    onClick={() => setSelected(c.id)}
+                    className={cx(
+                      "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
+                      selected === c.id ? "bg-accent-soft" : "hover:bg-fill",
+                    )}
+                  >
+                    <Avatar name={contactLabel(c)} size={44} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span
+                          className={cx(
+                            "truncate text-[16px]",
+                            c.unreadCount > 0 ? "font-semibold" : "font-medium",
+                          )}
+                        >
+                          {contactLabel(c)}
                         </span>
-                      )}
+                        <span
+                          className={cx(
+                            "shrink-0 text-[12px]",
+                            c.unreadCount > 0 ? "text-accent" : "text-ink-3",
+                          )}
+                        >
+                          {listTime(c.lastMessageAt)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[14px] text-ink-2">
+                          {c.lastMessageFromMe ? "Você: " : ""}
+                          {c.lastMessagePreview || "Sem mensagens"}
+                        </span>
+                        {c.unreadCount > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-semibold text-white">
+                            {c.unreadCount}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-3">
+                        <span className="truncate">{c.connectionName}</span>
+                        <span>·</span>
+                        <span className="truncate">{c.assignedUserName ?? "Sem responsável"}</span>
+                      </span>
                     </span>
-                    <span className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-3">
-                      <span className="truncate">{c.connectionName}</span>
-                      <span>·</span>
-                      <span className="truncate">{c.assignedUserName ?? "Sem responsável"}</span>
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        {/* Conversa */}
-        <section
-          className={cx(
-            "min-w-0 flex-1 flex-col bg-bg md:flex md:bg-surface",
-            selected ? "fixed inset-0 z-40 flex md:static md:z-auto" : "hidden",
-          )}
-          aria-label="Conversa"
-        >
-          {!selected && (
-            <div className="hidden flex-1 items-center justify-center text-[15px] text-ink-3 md:flex">
-              Escolha uma conversa
-            </div>
-          )}
-          {selected && (
-            <Thread
-              key={selected}
-              id={selected}
-              thread={thread}
-              error={threadError}
-              me={me}
-              people={people}
-              canViewAll={canViewAll}
-              agentActive={agentActive}
-              onBack={() => setSelected(null)}
-              onChanged={() => {
-                loadThread(selected);
-                loadList();
-              }}
-            />
-          )}
-        </section>
+          {/* Conversa */}
+          <section
+            className={cx(
+              "min-w-0 flex-1 flex-col bg-bg md:flex md:bg-surface",
+              selected ? "fixed inset-0 z-40 flex md:static md:z-auto" : "hidden",
+            )}
+            aria-label="Conversa"
+          >
+            {!selected && (
+              <div className="hidden flex-1 items-center justify-center text-[15px] text-ink-3 md:flex">
+                Escolha uma conversa
+              </div>
+            )}
+            {selected && (
+              <Thread
+                key={selected}
+                id={selected}
+                thread={thread}
+                error={threadError}
+                me={me}
+                people={people}
+                canViewAll={canViewAll}
+                agentActive={agentActive}
+                onBack={() => setSelected(null)}
+                onChanged={() => {
+                  loadThread(selected);
+                  loadList();
+                }}
+              />
+            )}
+          </section>
+        </div>
+
+        {showNew && (
+          <NewConversation
+            connections={connections}
+            onClose={() => setShowNew(false)}
+            onStarted={(id) => {
+              setShowNew(false);
+              setFilter("open");
+              setSelected(id);
+              loadList();
+            }}
+          />
+        )}
       </div>
-
-      {showNew && (
-        <NewConversation
-          connections={connections}
-          onClose={() => setShowNew(false)}
-          onStarted={(id) => {
-            setShowNew(false);
-            setFilter("open");
-            setSelected(id);
-            loadList();
-          }}
-        />
-      )}
-    </div>
+    </Extras.Provider>
   );
 }
 
@@ -528,7 +565,7 @@ function Thread({
         <div ref={bottom} />
       </div>
 
-      {c && <Composer id={id} onSent={onChanged} />}
+      {c && <Composer id={id} contactName={contactLabel(c)} onSent={onChanged} />}
     </>
   );
 }
@@ -561,9 +598,7 @@ function Media({ m, out }: { m: Msg; out: boolean }) {
   if (m.type === "video")
     // biome-ignore lint/a11y/useMediaCaption: vídeo enviado pelo contato, sem legenda disponível
     return <video src={src} controls preload="metadata" className="max-h-72 w-full rounded-xl" />;
-  if (m.type === "audio")
-    // biome-ignore lint/a11y/useMediaCaption: áudio de WhatsApp não tem legenda
-    return <audio src={src} controls preload="none" className="w-64 max-w-full" />;
+  if (m.type === "audio") return <AudioMessage m={m} src={src} out={out} />;
   if (m.type === "document")
     return (
       <a
@@ -588,9 +623,65 @@ function Media({ m, out }: { m: Msg; out: boolean }) {
   return null;
 }
 
+function AudioMessage({ m, src, out }: { m: Msg; src: string; out: boolean }) {
+  const { sttEnabled } = useContext(Extras);
+  const [text, setText] = useState(m.transcript);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div>
+      {/* biome-ignore lint/a11y/useMediaCaption: a transcrição aparece logo abaixo */}
+      <audio src={src} controls preload="none" className="w-64 max-w-full" />
+      {text ? (
+        <p
+          className={cx("mt-1 text-[14px] italic", out ? "text-white/90" : "text-ink-2")}
+          data-testid="transcricao"
+        >
+          “{text}”
+        </p>
+      ) : sttEnabled ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr(null);
+            try {
+              const r = await api<{ text: string | null }>(`/api/mensagens/${m.id}/transcrever`, {
+                method: "POST",
+              });
+              setText(r.text);
+            } catch (e) {
+              setErr((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="mt-1 text-[13px] font-semibold underline"
+        >
+          {busy ? "Transcrevendo..." : "Transcrever"}
+        </button>
+      ) : null}
+      {err && <p className="mt-1 text-[12px]">{err}</p>}
+    </div>
+  );
+}
+
 function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
   const out = m.direction === "out";
   const [retrying, setRetrying] = useState(false);
+  if (m.internal)
+    return (
+      <div className="mb-1.5 flex justify-end" data-testid="note">
+        <div className="max-w-[82%] rounded-[18px] rounded-br-md border border-warn/30 bg-warn-soft px-3 py-2 text-ink md:max-w-[65%]">
+          <p className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold text-warn">
+            <StickyNote size={12} /> Nota interna{m.sentByName ? ` · ${m.sentByName.split(" ")[0]}` : ""}
+          </p>
+          <p className="whitespace-pre-wrap break-words text-[15px] leading-snug">{m.body}</p>
+          <p className="mt-1 text-right text-[11px] text-ink-3">{messageTime(m.sentAt)}</p>
+        </div>
+      </div>
+    );
   const showBody = m.body && m.type !== "location";
   return (
     <div className={cx("mb-1.5 flex", out ? "justify-end" : "justify-start")} data-testid="message">
@@ -648,24 +739,51 @@ function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
   );
 }
 
-function Composer({ id, onSent }: { id: string; onSent: () => void }) {
+function Composer({ id, contactName, onSent }: { id: string; contactName: string; onSent: () => void }) {
+  const { quickReplies } = useContext(Extras);
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [note, setNote] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Atalho "/": lista as respostas rápidas enquanto a pessoa digita o atalho.
+  const slash = !note && /^\/[\w-]*$/.test(text) ? text.slice(1).toLowerCase() : null;
+  const matches =
+    slash === null
+      ? []
+      : quickReplies
+          .filter((r) => r.shortcut.includes(slash))
+          .sort((a, b) => Number(!a.shortcut.startsWith(slash)) - Number(!b.shortcut.startsWith(slash)))
+          .slice(0, 6);
+
+  function choose(r: QuickReply) {
+    setText(fillReply(r.body, contactName));
+    setPick(0);
+    areaRef.current?.focus();
+  }
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
     if (sending || (!text.trim() && !file)) return;
     setSending(true);
     setError(null);
-    const fd = new FormData();
-    if (text.trim()) fd.set("text", text);
-    if (file) fd.set("file", file);
     try {
-      await api(`/api/conversas/${id}/mensagens`, { method: "POST", body: fd });
+      if (note) {
+        await api(`/api/conversas/${id}/notas`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      } else {
+        const fd = new FormData();
+        if (text.trim()) fd.set("text", text);
+        if (file) fd.set("file", file);
+        await api(`/api/conversas/${id}/mensagens`, { method: "POST", body: fd });
+      }
       setText("");
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -681,14 +799,45 @@ function Composer({ id, onSent }: { id: string; onSent: () => void }) {
   return (
     <form
       onSubmit={submit}
-      className="material border-t border-separator px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 md:px-5"
+      className={cx(
+        "material relative border-t border-separator px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 md:px-5",
+        note && "bg-warn-soft/60",
+      )}
     >
       {error && (
         <div className="mb-2">
           <Notice>{error}</Notice>
         </div>
       )}
-      {file && (
+      {matches.length > 0 && (
+        <ul
+          aria-label="Respostas rápidas"
+          className="absolute right-3 bottom-full left-3 mb-2 max-h-72 overflow-y-auto rounded-2xl bg-surface p-1 shadow-lg ring-1 ring-separator md:right-5 md:left-5"
+        >
+          {matches.map((r, i) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => choose(r)}
+                className={cx(
+                  "block w-full rounded-xl px-3 py-2 text-left",
+                  i === pick ? "bg-fill" : "hover:bg-fill/60",
+                )}
+              >
+                <span className="block text-[13px] font-semibold text-accent">/{r.shortcut}</span>
+                <span className="line-clamp-2 block text-[14px] text-ink-2">{r.body}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {note && (
+        <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-warn">
+          <StickyNote size={12} /> Nota interna: só a equipe vê, não vai para o cliente.
+        </p>
+      )}
+      {file && !note && (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-fill px-3 py-2 text-[14px]">
           <Paperclip size={16} className="text-ink-2" />
           <span className="min-w-0 flex-1 truncate">{file.name}</span>
@@ -705,7 +854,7 @@ function Composer({ id, onSent }: { id: string; onSent: () => void }) {
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-1.5">
         <input
           ref={fileRef}
           type="file"
@@ -713,37 +862,94 @@ function Composer({ id, onSent }: { id: string; onSent: () => void }) {
           data-testid="file-input"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
+        {!note && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="mb-1 rounded-full p-2 text-ink-2 hover:bg-fill"
+            aria-label="Anexar arquivo"
+          >
+            <Paperclip size={20} />
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
-          className="mb-1 rounded-full p-2 text-ink-2 hover:bg-fill"
-          aria-label="Anexar arquivo"
+          onClick={() => setNote((v) => !v)}
+          aria-pressed={note}
+          aria-label="Nota interna"
+          title="Nota interna"
+          className={cx(
+            "mb-1 rounded-full p-2 hover:bg-fill",
+            note ? "bg-warn-soft text-warn" : "text-ink-2",
+          )}
         >
-          <Paperclip size={20} />
+          <StickyNote size={20} />
         </button>
+        {!note && quickReplies.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setText("/");
+              areaRef.current?.focus();
+            }}
+            aria-label="Respostas rápidas"
+            title="Respostas rápidas (/)"
+            className="mb-1 hidden rounded-full p-2 text-ink-2 hover:bg-fill sm:block"
+          >
+            <Zap size={20} />
+          </button>
+        )}
         <textarea
           ref={areaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setPick(0);
+          }}
           onKeyDown={(e) => {
+            if (matches.length) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                setPick((p) => (p + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+                return;
+              }
+              if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+                e.preventDefault();
+                const r = matches[pick];
+                if (r) choose(r);
+                return;
+              }
+              if (e.key === "Escape") {
+                setText("");
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               submit();
             }
           }}
           rows={1}
-          placeholder={file ? "Legenda (opcional)" : "Mensagem"}
-          aria-label="Mensagem"
-          className="max-h-40 min-h-10 flex-1 resize-none rounded-[20px] border border-separator bg-surface px-4 py-2 text-[15px] outline-none focus:border-accent"
+          placeholder={
+            note ? "Nota para a equipe" : file ? "Legenda (opcional)" : "Mensagem ou / para respostas rápidas"
+          }
+          aria-label={note ? "Nota interna" : "Mensagem"}
+          className={cx(
+            "max-h-40 min-h-10 flex-1 resize-none rounded-[20px] border bg-surface px-4 py-2 text-[15px] outline-none",
+            note ? "border-warn/40 focus:border-warn" : "border-separator focus:border-accent",
+          )}
           style={{ fieldSizing: "content" } as React.CSSProperties}
         />
         <button
           type="submit"
           disabled={sending || (!text.trim() && !file)}
-          className="mb-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white transition disabled:opacity-30"
-          aria-label="Enviar"
+          className={cx(
+            "mb-0.5 flex h-9 w-9 items-center justify-center rounded-full text-white transition disabled:opacity-30",
+            note ? "bg-warn" : "bg-accent",
+          )}
+          aria-label={note ? "Salvar nota" : "Enviar"}
         >
-          <SendHorizontal size={18} />
+          {note ? <StickyNote size={16} /> : <SendHorizontal size={18} />}
         </button>
       </div>
     </form>

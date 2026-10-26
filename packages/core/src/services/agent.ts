@@ -22,10 +22,11 @@ import {
   DEFAULT_AI_MODEL,
   type ToolDef,
 } from "../ai/anthropic.js";
+import type { Transcriber } from "../ai/transcribe.js";
 import { type Actor, can } from "../auth/permissions.js";
 import type { EvolutionApi } from "../whatsapp/evolution.js";
 import { listProducts, photosOfProducts, priceText, searchCatalog } from "./catalog.js";
-import { sendAiMessage } from "./conversations.js";
+import { sendAiMessage, transcribeMessage } from "./conversations.js";
 import { syncDealAssignee } from "./crm.js";
 import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
@@ -423,7 +424,13 @@ export async function maybeEnqueueAi(
   return true;
 }
 
-function describe(m: { type: string; body: string | null; mediaName: string | null }) {
+function describe(m: {
+  type: string;
+  body: string | null;
+  mediaName: string | null;
+  transcript?: string | null;
+}) {
+  if (m.type === "audio" && m.transcript) return `[áudio] ${m.transcript}`;
   const label: Record<string, string> = {
     image: "[foto]",
     audio: "[áudio, ainda não consigo ouvir]",
@@ -440,7 +447,13 @@ function describe(m: { type: string; body: string | null; mediaName: string | nu
 
 /** Converte o histórico em turnos alternados (exigido pela API), começando pelo cliente. */
 export function toChatTurns(
-  rows: { direction: "in" | "out"; type: string; body: string | null; mediaName: string | null }[],
+  rows: {
+    direction: "in" | "out";
+    type: string;
+    body: string | null;
+    mediaName: string | null;
+    transcript?: string | null;
+  }[],
 ) {
   const turns: ChatMessage[] = [];
   for (const r of rows) {
@@ -570,7 +583,7 @@ async function agendaHandlers(
   };
 }
 
-export type AiDeps = { evo: EvolutionApi; ai: AiClient };
+export type AiDeps = { evo: EvolutionApi; ai: AiClient; stt?: Transcriber };
 
 /** A IA passou a conversa: avisa o responsável (ou o próximo do rodízio, que vira responsável). */
 async function alertHuman(
@@ -613,20 +626,24 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
     return "agente-inativo";
   if (conv.aiPaused) return "pausada";
 
-  const recent = await db
-    .select({
-      direction: messages.direction,
-      type: messages.type,
-      body: messages.body,
-      mediaName: messages.mediaName,
-      sentByAi: messages.sentByAi,
-      sentAt: messages.sentAt,
-    })
-    .from(messages)
-    .where(eq(messages.conversationId, conv.id))
-    // Ordem de chegada: o horário do WhatsApp tem precisão de segundos e pode "voltar" em relação ao nosso.
-    .orderBy(desc(messages.createdAt))
-    .limit(agent.historyMessages);
+  const loadRecent = () =>
+    db
+      .select({
+        id: messages.id,
+        transcript: messages.transcript,
+        direction: messages.direction,
+        type: messages.type,
+        body: messages.body,
+        mediaName: messages.mediaName,
+        sentByAi: messages.sentByAi,
+        sentAt: messages.sentAt,
+      })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conv.id), eq(messages.internal, false)))
+      // Ordem de chegada: o horário do WhatsApp tem precisão de segundos e pode "voltar" em relação ao nosso.
+      .orderBy(desc(messages.createdAt))
+      .limit(agent.historyMessages);
+  let recent = await loadRecent();
   const last = recent[0];
   if (!last || last.direction !== "in") return "nada-novo";
   // Alguém da equipe falou com o cliente há pouco (pelo CRM ou pelo celular): a IA não atravessa.
@@ -641,6 +658,19 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
     return "sem-creditos";
   }
 
+  // Áudios novos do cliente: transcreve antes de responder (se houver serviço de transcrição).
+  if (deps.stt) {
+    const pending = [];
+    for (const m of recent) {
+      if (m.direction === "out") break;
+      if (m.type === "audio" && !m.transcript) pending.push(m.id);
+    }
+    for (const id of pending.slice(0, 3))
+      await transcribeMessage(db, deps.evo, deps.stt, organizationId, id).catch((e) =>
+        console.error(`[transcrição] mensagem ${id}:`, (e as Error)?.message ?? e),
+      );
+    if (pending.length) recent = await loadRecent();
+  }
   const org = await db.query.organizations.findFirst({ where: eq(organizations.id, organizationId) });
   const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, conv.contactId) });
   const turns = toChatTurns([...recent].reverse());
@@ -682,14 +712,12 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
   const rescheduled =
     newer && newer.runAt.getTime() > Date.now() && newer.runAt.getTime() < Date.now() + 4 * 60_000;
   if (rescheduled && !effects.transfer && !effects.end && !effects.moveTo && !effects.booked) return "adiada";
-  if (text) await sendAiMessage(db, deps.evo, organizationId, conv.id, text.slice(0, 4000));
+  if (text) await sendAiMessage(db, deps.evo, organizationId, conv.id, text.slice(0, 4000), { typing: true });
   if (effects.photos.length) {
     for (const ph of await photosOfProducts(db, organizationId, effects.photos)) {
       try {
         await sendAiMessage(db, deps.evo, organizationId, conv.id, "", {
-          name: ph.fileName ?? "foto.jpg",
-          mime: ph.mime,
-          data: Buffer.from(ph.data),
+          image: { name: ph.fileName ?? "foto.jpg", mime: ph.mime, data: Buffer.from(ph.data) },
         });
       } catch (e) {
         console.error(`[agente] falha ao enviar foto na conversa ${conv.id}:`, (e as Error)?.message ?? e);

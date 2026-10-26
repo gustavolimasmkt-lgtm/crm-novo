@@ -1,4 +1,5 @@
 export * from "./ai/anthropic.js";
+export * from "./ai/transcribe.js";
 export * from "./auth/crypto.js";
 export * from "./auth/permissions.js";
 export * from "./csv.js";
@@ -16,9 +17,11 @@ export * from "./services/errors.js";
 export * from "./services/events.js";
 export * from "./services/messages.js";
 export * from "./services/organizations.js";
+export * from "./services/quick-replies.js";
 export * from "./services/rotation.js";
 export * from "./services/schedule.js";
 export * from "./services/setup.js";
+export * from "./services/tasks.js";
 export * from "./text.js";
 export * from "./whatsapp/evolution.js";
 export * from "./whatsapp/parse.js";

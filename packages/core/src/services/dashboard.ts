@@ -97,9 +97,9 @@ export async function getDashboard(
     ), r as (
       select f.first_in,
         (select min(m.sent_at) from messages m where m.conversation_id = f.id and m.direction = 'out'
-           and m.sent_at >= f.first_in) as first_out,
+           and not m.internal and m.sent_at >= f.first_in) as first_out,
         (select min(m.sent_at) from messages m where m.conversation_id = f.id and m.direction = 'out'
-           and not m.sent_by_ai and m.sent_at >= f.first_in) as first_human
+           and not m.sent_by_ai and not m.internal and m.sent_at >= f.first_in) as first_human
       from f where ${inRange(sql`f.first_in`)}
     )
     select count(*) as total,

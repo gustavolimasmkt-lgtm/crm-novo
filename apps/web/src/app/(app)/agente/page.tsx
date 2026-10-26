@@ -107,6 +107,9 @@ export default async function AgentPage() {
             windowStart: followup.windowStart,
             windowEnd: followup.windowEnd,
             sundays: followup.sundays,
+            gapMinSeconds: followup.gapMinSeconds,
+            gapMaxSeconds: followup.gapMaxSeconds,
+            dailyLimit: followup.dailyLimit,
           }}
         />
       </div>

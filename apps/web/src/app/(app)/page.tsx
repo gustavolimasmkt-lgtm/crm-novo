@@ -1,4 +1,4 @@
-import { DASHBOARD_PERIODS, getDashboard, listAssignableUsers } from "@crm/core";
+import { countOverdueTasks, DASHBOARD_PERIODS, getDashboard, listAssignableUsers } from "@crm/core";
 import { getDb, ROLE_LABELS } from "@crm/db";
 import { Clock, MessageCircle } from "lucide-react";
 import Link from "next/link";
@@ -33,6 +33,12 @@ export default async function Home({
   const db = getDb();
   const g = await getDashboard(db, ctx.actor, ctx.organization.id, { period: sp.p, userId: sp.pessoa });
   const people = g.manager ? await listAssignableUsers(db, ctx.organization.id) : [];
+  const overdue = await countOverdueTasks(
+    db,
+    ctx.actor,
+    ctx.organization.id,
+    g.manager ? g.userId : ctx.user.id,
+  );
   const hour = Number(
     new Intl.DateTimeFormat("pt-BR", { hour: "numeric", timeZone: "America/Sao_Paulo" }).format(new Date()),
   );
@@ -89,6 +95,14 @@ export default async function Home({
         <Stat label="Vendas" value={String(g.kpi.won)} hint={money(g.kpi.wonCents)} />
         <Stat label="Conversão" value={pct(g.kpi.conversion)} hint="vendas ÷ leads do período" />
       </div>
+      {overdue > 0 && (
+        <Link
+          href="/tarefas"
+          className="mt-3 block rounded-xl bg-danger-soft px-4 py-2.5 text-[14px] text-danger"
+        >
+          {overdue} tarefa(s) atrasada(s). Ver tarefas.
+        </Link>
+      )}
       {g.kpi.visitsUnmarked > 0 && (
         <Link
           href="/agenda?ver=passadas"

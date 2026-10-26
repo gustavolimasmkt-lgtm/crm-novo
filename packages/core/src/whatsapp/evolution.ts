@@ -41,7 +41,8 @@ export interface EvolutionApi {
     instanceName: string,
     numbers: string[],
   ): Promise<{ number: string; exists: boolean; jid: string | null }[]>;
-  sendText(instanceName: string, to: string, text: string): Promise<SentMessage>;
+  /** delay (ms): a Evolution mostra "digitando..." por esse tempo antes de enviar. */
+  sendText(instanceName: string, to: string, text: string, opts?: { delay?: number }): Promise<SentMessage>;
   sendMedia(
     instanceName: string,
     to: string,
@@ -238,9 +239,16 @@ export function createEvolutionClient(opts: {
       });
     },
 
-    async sendText(instanceName, to, text) {
+    async sendText(instanceName, to, text, opts) {
       assertOwnedInstance(instanceName);
-      return sent(await call("POST", `/message/sendText/${enc(instanceName)}`, { number: to, text }));
+      const delay = opts?.delay ? Math.min(15_000, Math.max(0, Math.round(opts.delay))) : undefined;
+      return sent(
+        await call("POST", `/message/sendText/${enc(instanceName)}`, {
+          number: to,
+          text,
+          ...(delay ? { delay } : {}),
+        }),
+      );
     },
 
     async sendMedia(instanceName, to, m) {

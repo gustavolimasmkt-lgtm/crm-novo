@@ -39,5 +39,5 @@ jobs:
           cd apps/web
           npx playwright install --with-deps chromium
           (cd ../.. && pnpm --filter @crm/core fake-evolution &) && sleep 3
-          (APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste ANTHROPIC_API_KEY=teste ANTHROPIC_BASE_URL=http://127.0.0.1:3198 npx next start -p 3100 &) && sleep 5
+          (APP_URL=http://localhost:3100 EVOLUTION_API_URL=http://127.0.0.1:3199 EVOLUTION_API_KEY=chave-teste ANTHROPIC_API_KEY=teste ANTHROPIC_BASE_URL=http://127.0.0.1:3198 TRANSCRIBE_API_KEY=teste TRANSCRIBE_BASE_URL=http://127.0.0.1:3198/v1 npx next start -p 3100 &) && sleep 5
           npx playwright test

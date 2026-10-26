@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircle, Plus, Search, Settings2, Trash2, Upload, X } from "lucide-react";
+import { ListTodo, MessageCircle, Plus, Search, Settings2, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
@@ -532,6 +532,17 @@ function DealPanel({
                 )}
               </div>
             )}
+            <Link
+              href={`/tarefas?negociacao=${d.id}`}
+              className="flex items-center justify-between rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[15px] hover:bg-fill/60"
+            >
+              <span className="flex items-center gap-2">
+                <ListTodo size={16} className="text-ink-2" /> Tarefas desta negociação
+              </span>
+              <span aria-hidden className="text-ink-3">
+                ›
+              </span>
+            </Link>
 
             <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] bg-surface p-4">
               <Field label="Etapa">

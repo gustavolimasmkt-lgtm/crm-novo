@@ -11,7 +11,16 @@ type Step = { hours: number; text: string | null };
 export function FollowupForm({
   settings,
 }: {
-  settings: { enabled: boolean; steps: Step[]; windowStart: string; windowEnd: string; sundays: boolean };
+  settings: {
+    enabled: boolean;
+    steps: Step[];
+    windowStart: string;
+    windowEnd: string;
+    sundays: boolean;
+    gapMinSeconds: number;
+    gapMaxSeconds: number;
+    dailyLimit: number;
+  };
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveFollowupAction, {});
   const [steps, setSteps] = useState(settings.steps.map((s, i) => ({ ...s, key: i })));
@@ -116,6 +125,36 @@ export function FollowupForm({
         />
         Enviar também aos domingos
       </label>
+      <fieldset className="space-y-3 rounded-xl bg-fill/60 p-3">
+        <legend className="px-1 text-[14px] font-semibold">Proteção contra bloqueio do número</legend>
+        <p className="text-[12px] text-ink-2">
+          Vale para follow-ups e lembretes de visita. Mensagens saem uma de cada vez por número, com intervalo
+          aleatório, e param ao bater o limite do dia. Respostas da IA a quem acabou de escrever não esperam.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Intervalo mín. (s)">
+            <Input
+              name="gapMinSeconds"
+              type="number"
+              min={10}
+              max={3600}
+              defaultValue={settings.gapMinSeconds}
+            />
+          </Field>
+          <Field label="Intervalo máx. (s)">
+            <Input
+              name="gapMaxSeconds"
+              type="number"
+              min={10}
+              max={3600}
+              defaultValue={settings.gapMaxSeconds}
+            />
+          </Field>
+          <Field label="Limite por dia">
+            <Input name="dailyLimit" type="number" min={1} max={1000} defaultValue={settings.dailyLimit} />
+          </Field>
+        </div>
+      </fieldset>
       <p className="text-[12px] text-ink-3">
         Cada follow-up conta a partir da última mensagem. Se o cliente responder, a contagem recomeça.
         Follow-up escrito pela IA gasta créditos.
