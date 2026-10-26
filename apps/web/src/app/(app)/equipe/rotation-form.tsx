@@ -8,12 +8,25 @@ import type { FormState } from "@/lib/form";
 export function RotationForm({
   enabled,
   notify,
+  notifyMessages,
   userIds,
   people,
   canEdit,
+  recent,
 }: {
   enabled: boolean;
   notify: boolean;
+  notifyMessages: boolean;
+  recent: {
+    id: string;
+    name: string | null;
+    toPhone: string;
+    body: string;
+    sentAt: string | null;
+    attempts: number;
+    error: string | null;
+    createdAt: string;
+  }[];
   userIds: string[];
   people: { id: string; name: string; phone: string | null }[];
   canEdit: boolean;
@@ -52,6 +65,20 @@ export function RotationForm({
             className="size-5 accent-[var(--accent)]"
           />
         </label>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-[15px]">
+            Avisar o responsável a cada mensagem de cliente
+            <span className="block text-[12px] text-ink-3">
+              Só quando a IA não está respondendo. No máximo 1 aviso a cada 30 min por conversa.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            name="notifyMessages"
+            defaultChecked={notifyMessages}
+            className="size-5 shrink-0 accent-[var(--accent)]"
+          />
+        </label>
         <div className="divide-y divide-separator rounded-xl bg-fill/60">
           {people.map((p) => (
             <label key={p.id} className="flex items-center gap-3 px-3 py-2.5">
@@ -79,6 +106,40 @@ export function RotationForm({
           {pending ? "Salvando..." : "Salvar rodízio"}
         </Button>
       )}
+      <div className="border-t border-separator pt-4" data-testid="ultimos-avisos">
+        <h3 className="mb-2 text-[14px] font-semibold">Últimos avisos</h3>
+        {recent.length === 0 ? (
+          <p className="text-[13px] text-ink-3">Nenhum aviso ainda.</p>
+        ) : (
+          <ul className="space-y-2">
+            {recent.map((n) => (
+              <li key={n.id} className="text-[13px]">
+                <div className="flex items-center gap-2">
+                  {n.sentAt ? (
+                    <Badge tone="ok">enviado</Badge>
+                  ) : n.attempts >= 5 ? (
+                    <Badge tone="danger">falhou</Badge>
+                  ) : (
+                    <Badge tone="warn">{n.attempts ? "tentando" : "na fila"}</Badge>
+                  )}
+                  <span className="truncate font-medium">{n.name ?? n.toPhone}</span>
+                  <span className="ml-auto shrink-0 text-ink-3">
+                    {new Date(n.createdAt).toLocaleString("pt-BR", {
+                      timeZone: "America/Sao_Paulo",
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <p className="truncate text-ink-2">{n.body.split("\n")[0]}</p>
+                {n.error && !n.sentAt && <p className="text-danger">{n.error}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </form>
   );
 }

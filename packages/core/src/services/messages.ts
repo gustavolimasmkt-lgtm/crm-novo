@@ -22,7 +22,7 @@ import {
 import { maybeEnqueueAi } from "./agent.js";
 import { autoCreateDeal } from "./crm.js";
 import { notifyOrg } from "./events.js";
-import { distributeLead } from "./rotation.js";
+import { alertNewMessage, distributeLead } from "./rotation.js";
 
 type Connection = typeof whatsappConnections.$inferSelect;
 type Obj = Record<string, unknown>;
@@ -201,12 +201,16 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
   // Quem escreve é alguém da equipe (ex.: respondendo um aviso): não vira lead nem recebe IA.
   if (!p.fromMe && !(await isTeamPhone(db, c.organizationId, contact.phone))) {
     const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id, p.ad);
-    if (newDealId)
-      await distributeLead(db, c.organizationId, newDealId, conversation.id, c.id, {
-        name: contact.name ?? contact.pushName ?? null,
-        phone: contact.phone ?? null,
-      });
-    await maybeEnqueueAi(db, c.organizationId, conversation.id, c.id);
+    const distributed = newDealId
+      ? await distributeLead(db, c.organizationId, newDealId, conversation.id, c.id, {
+          name: contact.name ?? contact.pushName ?? null,
+          phone: contact.phone ?? null,
+        })
+      : null;
+    const aiWillAnswer = await maybeEnqueueAi(db, c.organizationId, conversation.id, c.id);
+    // Lead novo já avisado pelo rodízio; com a IA respondendo, o aviso vem quando ela passar para humano.
+    if (!distributed && !aiWillAnswer)
+      await alertNewMessage(db, c.organizationId, conversation.id, c.id, contact, previewOf(p.type, p.body));
   }
   await notifyOrg(db, { o: c.organizationId, t: "message", c: conversation.id });
   return { conversationId: conversation.id, duplicate: false };

@@ -34,6 +34,7 @@ import {
   saveRotation,
   saveScheduleSettings,
   searchCatalog,
+  sendMessage,
   setMyPhone,
   simulateAgent,
 } from "../src/index.js";
@@ -282,21 +283,23 @@ describe("rodízio e avisos", () => {
     expect(convs.map((c) => c.assignedUserId)).toEqual([ana, bruno, ana]);
     const ds = await db.select().from(deals).orderBy(deals.number);
     expect(ds.map((d) => d.assignedUserId)).toEqual([ana, bruno, ana]);
-    // Bruno não tem telefone: só a Ana recebe (2 leads).
-    const out = await db.select().from(notificationOutbox);
-    expect(out).toHaveLength(2);
+    // Bruno não tem telefone: só a Ana recebe (2 leads + a mensagem nova do cliente dela).
+    const out = await db.select().from(notificationOutbox).orderBy(notificationOutbox.createdAt);
+    expect(out).toHaveLength(3);
     expect(out[0]?.body).toContain("NOVO LEAD PARA VOCÊ");
     expect(out[0]?.body).toContain("5548999990001");
+    expect(out[2]?.body).toContain("MENSAGEM DE CLIENTE");
+    expect(out[2]?.body).toContain('"de novo"');
 
     fake.sent.length = 0;
-    expect(await processOutbox(db, evo)).toEqual({ found: 2, sent: 2 });
-    expect(fake.sent.map((s) => s.to)).toEqual(["5548988880001", "5548988880001"]);
+    expect(await processOutbox(db, evo)).toEqual({ found: 3, sent: 3 });
+    expect(fake.sent.map((s) => s.to)).toEqual(["5548988880001", "5548988880001", "5548988880001"]);
     expect(await processOutbox(db, evo)).toEqual({ found: 0, sent: 0 });
 
     // Ana respondendo o aviso pelo número da empresa: não vira lead nem gira o rodízio.
     await say("ok, vou atender", "5548988880001");
     expect(await db.select().from(deals)).toHaveLength(3);
-    expect(await db.select().from(notificationOutbox)).toHaveLength(2);
+    expect(await db.select().from(notificationOutbox)).toHaveLength(3);
 
     // Rodízio desligado: ninguém é escolhido.
     await db
@@ -308,6 +311,64 @@ describe("rodízio e avisos", () => {
     await expect(
       saveRotation(db, admin, org.id, { enabled: true, notify: true, userIds: ["lixo"] }),
     ).rejects.toThrow(/pelo menos uma/);
+  });
+
+  it("mensagem nova avisa o responsável (com intervalo), cliente antigo sem dono vai para o rodízio e IA ativa não avisa", async () => {
+    const { org, admin, sellers, say, agentOn } = await setup();
+    const [ana, bruno] = sellers.map((s) => s.userId);
+    await setMyPhone(db, ana ?? "", "48988880001");
+    await setMyPhone(db, bruno ?? "", "48988880002");
+    const notices = async () =>
+      (await db.select().from(notificationOutbox).orderBy(notificationOutbox.createdAt)).map(
+        (n) => n.body.split("\n")[0],
+      );
+
+    // Rodízio desligado e conversa sem dono: ninguém para avisar.
+    await say("oi", "5548999990001");
+    expect(await notices()).toEqual([]);
+
+    // Liga o rodízio: a próxima mensagem do cliente sem dono vai para a Ana.
+    await saveRotation(db, admin, org.id, { enabled: true, notify: true, userIds: [ana ?? "", bruno ?? ""] });
+    await say("alguém aí?", "5548999990001");
+    expect(await notices()).toEqual(["🔔 CLIENTE ESCREVEU, AGORA É SEU"]);
+    const [conv] = await db.select().from(conversations);
+    expect(conv?.assignedUserId).toBe(ana);
+
+    // Logo em seguida: não repete o aviso.
+    await say("??", "5548999990001");
+    expect(await notices()).toHaveLength(1);
+
+    // Ana responde; a próxima mensagem do cliente avisa de novo.
+    await sendMessage(
+      db,
+      evo,
+      { isMaster: false, role: "seller", userId: ana ?? "" },
+      org.id,
+      conv?.id ?? "",
+      {
+        text: "Oi! Sou a Ana",
+      },
+    );
+    await say("quero ver o carro", "5548999990001");
+    expect(await notices()).toEqual(["🔔 CLIENTE ESCREVEU, AGORA É SEU", "💬 MENSAGEM DE CLIENTE"]);
+
+    // Desligar o aviso de mensagens: para de avisar o responsável.
+    await saveRotation(db, admin, org.id, {
+      enabled: true,
+      notify: true,
+      notifyMessages: false,
+      userIds: [ana ?? "", bruno ?? ""],
+    });
+    await db.update(conversations).set({ lastNotifiedAt: null });
+    await say("e aí?", "5548999990001");
+    expect(await notices()).toHaveLength(2);
+
+    // Com a IA respondendo, não avisa a cada mensagem.
+    await saveRotation(db, admin, org.id, { enabled: true, notify: true, userIds: [ana ?? "", bruno ?? ""] });
+    await db.update(conversations).set({ lastNotifiedAt: null, aiPaused: false });
+    await agentOn();
+    await say("tem hrv?", "5548999990001");
+    expect(await notices()).toHaveLength(2);
   });
 
   it("quando a IA transfere, avisa o responsável (ou puxa o próximo do rodízio)", async () => {

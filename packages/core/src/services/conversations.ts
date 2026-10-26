@@ -407,6 +407,8 @@ export async function sendMessage(
       lastMessageFromMe: true,
       unreadCount: 0,
       status: "open",
+      // Equipe respondeu: a próxima mensagem do cliente pode gerar aviso de novo.
+      lastNotifiedAt: null,
       ...assign,
       updatedAt: new Date(),
     })

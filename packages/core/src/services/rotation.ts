@@ -9,7 +9,7 @@ import {
   users,
   whatsappConnections,
 } from "@crm/db";
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { type Actor, can } from "../auth/permissions.js";
 import type { EvolutionApi } from "../whatsapp/evolution.js";
 import { AppError } from "./errors.js";
@@ -25,6 +25,7 @@ export async function getRotation(db: Database, organizationId: string) {
       userIds: [] as string[],
       lastUserId: null,
       notify: true,
+      notifyMessages: true,
       updatedAt: new Date(),
     }
   );
@@ -34,7 +35,7 @@ export async function saveRotation(
   db: Database,
   actor: ActorU,
   organizationId: string,
-  input: { enabled: boolean; userIds: string[]; notify: boolean },
+  input: { enabled: boolean; userIds: string[]; notify: boolean; notifyMessages?: boolean },
 ) {
   if (!can(actor, "settings.manage"))
     throw new AppError("forbidden", "Só administradores e gestores configuram o rodízio.");
@@ -54,7 +55,13 @@ export async function saveRotation(
   const ok = ids.filter((id) => valid.some((v) => v.id === id));
   if (input.enabled && !ok.length)
     throw new AppError("validation", "Escolha pelo menos uma pessoa para o rodízio.");
-  const values = { enabled: input.enabled, userIds: ok, notify: input.notify, updatedAt: new Date() };
+  const values = {
+    enabled: input.enabled,
+    userIds: ok,
+    notify: input.notify,
+    notifyMessages: input.notifyMessages ?? true,
+    updatedAt: new Date(),
+  };
   await db
     .insert(leadRotation)
     .values({ organizationId, ...values })
@@ -114,7 +121,7 @@ export async function notifyUser(
   if (!u?.phone) return false;
   await db
     .insert(notificationOutbox)
-    .values({ organizationId, connectionId, toPhone: u.phone, body: body.slice(0, 2000) });
+    .values({ organizationId, connectionId, userId, toPhone: u.phone, body: body.slice(0, 2000) });
   return true;
 }
 
@@ -190,6 +197,7 @@ export async function processOutbox(db: Database, evo: EvolutionApi, limit = 10)
         .where(eq(notificationOutbox.id, n.id));
       sent++;
     } catch (e) {
+      console.error(`[avisos] falha ao avisar ${n.toPhone}:`, (e as Error)?.message ?? e);
       await db
         .update(notificationOutbox)
         .set({ attempts: n.attempts + 1, error: String((e as Error)?.message ?? e).slice(0, 300) })
@@ -216,5 +224,88 @@ export async function rotationOverview(db: Database, organizationId: string) {
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(and(eq(memberships.organizationId, organizationId), eq(memberships.active, true)))
     .orderBy(asc(users.name));
-  return { enabled: r.enabled, notify: r.notify, userIds: r.userIds, lastUserId: r.lastUserId, people };
+  const recent = await db
+    .select({
+      id: notificationOutbox.id,
+      name: users.name,
+      toPhone: notificationOutbox.toPhone,
+      body: notificationOutbox.body,
+      sentAt: notificationOutbox.sentAt,
+      attempts: notificationOutbox.attempts,
+      error: notificationOutbox.error,
+      createdAt: notificationOutbox.createdAt,
+    })
+    .from(notificationOutbox)
+    .leftJoin(users, eq(users.id, notificationOutbox.userId))
+    .where(eq(notificationOutbox.organizationId, organizationId))
+    .orderBy(desc(notificationOutbox.createdAt))
+    .limit(10);
+  return {
+    enabled: r.enabled,
+    notify: r.notify,
+    notifyMessages: r.notifyMessages,
+    userIds: r.userIds,
+    lastUserId: r.lastUserId,
+    people,
+    recent,
+  };
+}
+
+const MESSAGE_NOTICE_GAP_MS = 30 * 60_000;
+
+/**
+ * Cliente mandou mensagem e a IA não vai responder: avisa o responsável (no máximo 1 aviso a cada 30 min
+ * por conversa). Conversa sem responsável vai para o próximo do rodízio (se ligado), que recebe o aviso.
+ */
+export async function alertNewMessage(
+  db: Database,
+  organizationId: string,
+  conversationId: string,
+  connectionId: string,
+  contact: { name: string | null; pushName: string | null; phone: string | null },
+  preview: string,
+) {
+  const r = await getRotation(db, organizationId);
+  if (!r.notify) return null;
+  const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, conversationId) });
+  if (!conv) return null;
+  const who = contact.name ?? contact.pushName ?? contact.phone ?? "cliente";
+  const link = conversationLink(conversationId);
+  let userId = conv.assignedUserId;
+  let title = "💬 MENSAGEM DE CLIENTE";
+  if (!userId) {
+    userId = await pickNextAssignee(db, organizationId);
+    if (!userId) return null;
+    await db
+      .update(conversations)
+      .set({ assignedUserId: userId })
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.assignedUserId)));
+    const { syncDealAssignee } = await import("./crm.js");
+    await syncDealAssignee(db, organizationId, conv.contactId, userId);
+    title = "🔔 CLIENTE ESCREVEU, AGORA É SEU";
+  } else if (!r.notifyMessages) return null;
+  // Limita: no máximo um aviso a cada 30 min por conversa.
+  const claimed = await db
+    .update(conversations)
+    .set({ lastNotifiedAt: new Date() })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        or(
+          isNull(conversations.lastNotifiedAt),
+          lt(conversations.lastNotifiedAt, new Date(Date.now() - MESSAGE_NOTICE_GAP_MS)),
+        ),
+      ),
+    )
+    .returning({ id: conversations.id });
+  if (!claimed.length) return null;
+  const sent = await notifyUser(
+    db,
+    organizationId,
+    connectionId,
+    userId,
+    `${title}\nCliente: ${who}${contact.phone ? ` (${contact.phone})` : ""}\n"${preview.slice(0, 200)}"${link ? `\nAbrir conversa: ${link}` : ""}`,
+  );
+  await notifyOrg(db, { o: organizationId, t: "conversation", c: conversationId });
+  return sent ? userId : null;
 }

@@ -66,6 +66,12 @@ export default async function TeamPage() {
           <RotationForm
             enabled={rotation.enabled}
             notify={rotation.notify}
+            notifyMessages={rotation.notifyMessages}
+            recent={rotation.recent.map((n) => ({
+              ...n,
+              sentAt: n.sentAt?.toISOString() ?? null,
+              createdAt: n.createdAt.toISOString(),
+            }))}
             userIds={rotation.userIds}
             people={rotation.people}
             canEdit={can(ctx.actor, "settings.manage")}

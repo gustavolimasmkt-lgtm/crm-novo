@@ -304,6 +304,8 @@ export const conversations = pgTable(
     /** Resumo do atendimento feito pela IA (interesse, temperatura, nota, próximo passo). */
     aiSummary: jsonb("ai_summary").$type<LeadSummary>(),
     aiSummaryAt: timestamp("ai_summary_at", { withTimezone: true }),
+    /** Último aviso de mensagem nova mandado ao responsável. */
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -758,6 +760,8 @@ export const leadRotation = pgTable("lead_rotation", {
   lastUserId: uuid("last_user_id"),
   /** Avisa no WhatsApp pessoal do vendedor. */
   notify: boolean("notify").notNull().default(true),
+  /** Avisa o responsável quando o cliente manda mensagem (no máximo 1 aviso a cada 30 min por conversa). */
+  notifyMessages: boolean("notify_messages").notNull().default(true),
   updatedAt: updatedAt(),
 });
 
@@ -770,6 +774,7 @@ export const notificationOutbox = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     toPhone: text("to_phone").notNull(),
     body: text("body").notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -782,7 +787,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 11 as const;
+export const schemaVersion = 12 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

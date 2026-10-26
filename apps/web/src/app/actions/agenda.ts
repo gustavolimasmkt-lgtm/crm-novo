@@ -74,6 +74,7 @@ export async function saveRotationAction(_: FormState, fd: FormData): Promise<Fo
     await saveRotation(getDb(), ctx.actor, ctx.organization.id, {
       enabled: str(fd, "enabled") === "on",
       notify: str(fd, "notify") === "on",
+      notifyMessages: str(fd, "notifyMessages") === "on",
       userIds: fd.getAll("userIds").filter((v): v is string => typeof v === "string"),
     });
   } catch (e) {
