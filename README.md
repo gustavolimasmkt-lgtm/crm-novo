@@ -100,3 +100,9 @@ npx playwright test
 - Respostas rápidas (`/respostas`), notas internas (`messages.internal`), tarefas (`/tarefas`, aviso por timer de 20 s).
 - Anti-bloqueio: `reserveAutomatedSend` reserva a vez no número (`whatsapp_connections.next_automated_at`) e conta `messages.automation` do dia.
 - Transcrição de áudio (opcional): `TRANSCRIBE_API_KEY`; para Groq, `TRANSCRIBE_BASE_URL=https://api.groq.com/openai/v1` e `TRANSCRIBE_MODEL=whisper-large-v3-turbo`. Sem essas variáveis usa OpenAI (`whisper-1`).
+
+## Mensagens, campanhas e resumo
+
+- Responder (`quoted`), editar (`/chat/updateMessage`) e apagar para todos (`/chat/deleteMessageForEveryone`) pela Evolution; edição/apagado do cliente chegam como `protocolMessage`.
+- Mensagens agendadas (`scheduled_messages`) e campanhas (`campaigns`, `campaign_recipients`) saem pelo timer de 20 s; campanhas usam a mesma fila anti-bloqueio do follow-up. "SAIR" marca `contacts.opt_out`.
+- Resumo do lead: `summarizeConversation` (modelo Haiku), guardado em `conversations.ai_summary`.

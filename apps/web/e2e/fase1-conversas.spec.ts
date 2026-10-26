@@ -78,8 +78,8 @@ test("conversas: recebe em tempo real, responde, anexa, fecha, inicia nova e res
   await item.click();
   const thread = page.getByTestId("thread-messages");
   await expect(thread.getByText("Oi, o Tiggo 2 ainda está disponível?")).toBeVisible();
-  await page.getByLabel("Mensagem").fill("Está sim! Quer agendar uma visita?");
-  await page.getByLabel("Mensagem").press("Enter");
+  await page.getByLabel("Mensagem", { exact: true }).fill("Está sim! Quer agendar uma visita?");
+  await page.getByLabel("Mensagem", { exact: true }).press("Enter");
   await expect(thread.getByText("Está sim! Quer agendar uma visita?")).toBeVisible();
   expect(await lastSent()).toMatchObject({ kind: "sendText", to: cliente1 });
   await expect(
@@ -116,7 +116,7 @@ test("conversas: recebe em tempo real, responde, anexa, fecha, inicia nova e res
   await page.getByRole("textbox", { name: /^Número/ }).fill("(48) 99674-3297");
   await page.getByRole("button", { name: "Iniciar conversa" }).click();
   await expect(page.getByTestId("thread-title")).toHaveText("+55 (48) 99674-3297");
-  await page.getByLabel("Mensagem").fill("Olá, aqui é da loja!");
+  await page.getByLabel("Mensagem", { exact: true }).fill("Olá, aqui é da loja!");
   await page.getByRole("button", { name: "Enviar" }).click();
   await expect(thread.getByText("Olá, aqui é da loja!")).toBeVisible();
   expect(await lastSent()).toMatchObject({ to: "5548996743297" });

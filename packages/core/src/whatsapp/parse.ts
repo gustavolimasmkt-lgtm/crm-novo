@@ -14,6 +14,8 @@ export type ParsedMessage = {
   mediaMime: string | null;
   mediaName: string | null;
   sentAt: Date;
+  /** Id (no WhatsApp) da mensagem que esta responde, se for resposta. */
+  quotedExternalId: string | null;
   raw: Record<string, unknown>;
 };
 
@@ -137,6 +139,16 @@ export function parseMessage(data: unknown): ParsedMessage | { skip: SkipReason 
     body = str(obj(m.buttonsResponseMessage)?.selectedDisplayText) ?? str(obj(m.listResponseMessage)?.title);
   }
 
+  // Resposta a outra mensagem: o id citado vem no contextInfo do conteúdo.
+  let quotedExternalId: string | null = null;
+  for (const v of Object.values(m)) {
+    const id = str(obj(obj(v)?.contextInfo)?.stanzaId);
+    if (id) {
+      quotedExternalId = id;
+      break;
+    }
+  }
+
   const ts = d.messageTimestamp;
   const seconds =
     typeof ts === "number" ? ts : typeof ts === "string" ? Number(ts) : Number(obj(ts)?.low ?? NaN);
@@ -153,8 +165,33 @@ export function parseMessage(data: unknown): ParsedMessage | { skip: SkipReason 
     mediaMime,
     mediaName,
     sentAt,
+    quotedExternalId,
     raw: { key, message: d.message, messageTimestamp: d.messageTimestamp },
   };
+}
+
+/** Mensagem apagada para todos ou editada (protocolMessage), com o id da mensagem original. */
+export function parseProtocol(
+  data: unknown,
+): { kind: "revoke"; targetId: string } | { kind: "edit"; targetId: string; text: string } | null {
+  const d = obj(data);
+  let m = obj(d?.message);
+  for (let i = 0; i < 4 && m; i++) {
+    const inner =
+      obj(obj(m.ephemeralMessage)?.message) ?? obj(obj(m.editedMessage)?.message) ?? obj(obj(m.message));
+    if (m.protocolMessage || !inner) break;
+    m = inner;
+  }
+  const pm = obj(m?.protocolMessage);
+  const target = str(obj(pm?.key)?.id);
+  if (!pm || !target) return null;
+  const type = pm.type;
+  if (type === 0 || type === "REVOKE") return { kind: "revoke", targetId: target };
+  const edited = obj(pm.editedMessage);
+  const text = str(edited?.conversation) ?? str(obj(edited?.extendedTextMessage)?.text);
+  if ((type === 14 || type === "MESSAGE_EDIT" || edited) && text)
+    return { kind: "edit", targetId: target, text };
+  return null;
 }
 
 /** Status de entrega vindo de messages.update. */

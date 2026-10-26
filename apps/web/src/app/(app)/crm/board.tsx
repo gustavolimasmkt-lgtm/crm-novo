@@ -390,6 +390,14 @@ type DealDetail = {
     actorName: string | null;
   }[];
   conversationId: string | null;
+  aiSummary: {
+    resumo: string;
+    interesse: string | null;
+    temperatura: "quente" | "morno" | "frio";
+    nota: number;
+    proximoPasso: string | null;
+    objecoes: string | null;
+  } | null;
 };
 
 function eventText(e: DealDetail["events"][number]) {
@@ -543,6 +551,34 @@ function DealPanel({
                 ›
               </span>
             </Link>
+            {d.aiSummary && (
+              <div
+                className="space-y-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-[14px]"
+                data-testid="resumo-negociacao"
+              >
+                <p className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">Resumo da IA</span>
+                  <span
+                    className={cx(
+                      "rounded-full px-2 py-0.5 text-[12px] font-semibold",
+                      d.aiSummary.temperatura === "quente"
+                        ? "bg-danger-soft text-danger"
+                        : d.aiSummary.temperatura === "morno"
+                          ? "bg-warn-soft text-warn"
+                          : "bg-fill text-ink-2",
+                    )}
+                  >
+                    {d.aiSummary.temperatura} · {d.aiSummary.nota}/10
+                  </span>
+                </p>
+                {d.aiSummary.interesse && <p className="text-ink-2">Interesse: {d.aiSummary.interesse}</p>}
+                <p>{d.aiSummary.resumo}</p>
+                {d.aiSummary.objecoes && <p className="text-ink-2">Objeções: {d.aiSummary.objecoes}</p>}
+                {d.aiSummary.proximoPasso && (
+                  <p className="text-ink-2">Próximo passo: {d.aiSummary.proximoPasso}</p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] bg-surface p-4">
               <Field label="Etapa">

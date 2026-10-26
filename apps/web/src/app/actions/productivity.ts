@@ -1,6 +1,14 @@
 "use server";
 
-import { createTask, deleteQuickReply, deleteTask, saveQuickReply, setTaskDone } from "@crm/core";
+import {
+  createCampaign,
+  createTask,
+  deleteQuickReply,
+  deleteTask,
+  saveQuickReply,
+  setCampaignStatus,
+  setTaskDone,
+} from "@crm/core";
 import { getDb } from "@crm/db";
 import { revalidatePath } from "next/cache";
 import { type FormState, str, toFormError } from "@/lib/form";
@@ -68,5 +76,39 @@ export async function deleteTaskAction(id: string) {
     return toFormError(e);
   }
   revalidatePath("/tarefas");
+  return { ok: true };
+}
+
+export async function createCampaignAction(_: FormState, fd: FormData): Promise<FormState> {
+  const ctx = await requireOrg();
+  try {
+    const at = str(fd, "startAt").match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    await createCampaign(getDb(), ctx.actor, ctx.organization.id, {
+      name: str(fd, "name"),
+      connectionId: str(fd, "connectionId"),
+      body: str(fd, "body"),
+      optOutFooter: str(fd, "optOutFooter") === "on",
+      filter: {
+        stageIds: fd.getAll("stageIds").map(String),
+        tagIds: fd.getAll("tagIds").map(String),
+        lastContactDays: str(fd, "lastContactDays") ? Number(str(fd, "lastContactDays")) : null,
+      },
+      startAt: at ? new Date(`${at[1]}T${at[2]}:00-03:00`) : null,
+    });
+  } catch (e) {
+    return toFormError(e);
+  }
+  revalidatePath("/campanhas");
+  return { ok: true, message: "Campanha criada." };
+}
+
+export async function setCampaignStatusAction(id: string, status: "running" | "paused" | "canceled") {
+  const ctx = await requireOrg();
+  try {
+    await setCampaignStatus(getDb(), ctx.actor, ctx.organization.id, id, status);
+  } catch (e) {
+    return toFormError(e);
+  }
+  revalidatePath("/campanhas");
   return { ok: true };
 }

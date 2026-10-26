@@ -19,9 +19,12 @@ export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
       data: Buffer.from(await f.arrayBuffer()),
     };
   }
+  const replyTo =
+    typeof fd.get("replyTo") === "string" ? (fd.get("replyTo") as string) || undefined : undefined;
   const messageId = await sendMessage(getDb(), getEvolution(), ctx.actor, ctx.organizationId, id, {
     text,
     file,
+    replyTo,
   });
   return Response.json({ id: messageId });
 });

@@ -6,6 +6,7 @@ import {
   dealSources,
   deals,
   dealTags,
+  type LeadSummary,
   memberships,
   pipelineStages,
   pipelines,
@@ -500,8 +501,8 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
       .where(eq(dealEvents.dealId, d.id))
       .orderBy(desc(dealEvents.createdAt))
       .limit(100),
-    db.execute<{ id: string }>(
-      sql`select c.id from conversations c where c.contact_id = ${d.contactId} order by (c.connection_id = ${d.connectionId}) desc nulls last, c.last_message_at desc nulls last limit 1`,
+    db.execute<{ id: string; ai_summary: LeadSummary | null; ai_summary_at: string | null }>(
+      sql`select c.id, c.ai_summary, c.ai_summary_at from conversations c where c.contact_id = ${d.contactId} order by (c.connection_id = ${d.connectionId}) desc nulls last, c.last_message_at desc nulls last limit 1`,
     ),
   ]);
   const showValues = can(actor, "deals.view_values");
@@ -516,7 +517,9 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
     stage,
     tags: tagRows,
     events: evs,
-    conversationId: (conv as unknown as { id: string }[])[0]?.id ?? null,
+    conversationId: conv[0]?.id ?? null,
+    aiSummary: conv[0]?.ai_summary ?? null,
+    aiSummaryAt: conv[0]?.ai_summary_at ?? null,
   };
 }
 

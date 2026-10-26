@@ -254,6 +254,8 @@ export const contacts = pgTable(
      * ficam false até a primeira mensagem, quando o jid real substitui o provisório.
      */
     waVerified: boolean("wa_verified").notNull().default(false),
+    /** Pediu para não receber campanhas (respondeu SAIR). */
+    optOut: boolean("opt_out").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -264,6 +266,15 @@ export const contacts = pgTable(
 );
 
 export const conversationStatusEnum = pgEnum("conversation_status", ["open", "closed"]);
+
+export type LeadSummary = {
+  resumo: string;
+  interesse: string | null;
+  temperatura: "quente" | "morno" | "frio";
+  nota: number;
+  proximoPasso: string | null;
+  objecoes: string | null;
+};
 
 export const conversations = pgTable(
   "conversations",
@@ -290,6 +301,9 @@ export const conversations = pgTable(
     aiPausedReason: text("ai_paused_reason"),
     /** Follow-ups da IA já enviados desde a última mensagem do cliente. */
     followupCount: integer("followup_count").notNull().default(0),
+    /** Resumo do atendimento feito pela IA (interesse, temperatura, nota, próximo passo). */
+    aiSummary: jsonb("ai_summary").$type<LeadSummary>(),
+    aiSummaryAt: timestamp("ai_summary_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -344,8 +358,13 @@ export const messages = pgTable(
     internal: boolean("internal").notNull().default(false),
     /** Texto do áudio (transcrição). */
     transcript: text("transcript"),
-    /** Envio automático (follow-up, lembrete): conta no limite anti-bloqueio. */
+    /** Envio automático (follow-up, lembrete, campanha): conta no limite anti-bloqueio. */
     automation: text("automation"),
+    /** Mensagem citada (resposta): nossa referência e o id no WhatsApp. */
+    quotedId: uuid("quoted_id"),
+    quotedExternalId: text("quoted_external_id"),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Mensagem original do WhatsApp (necessária para baixar a mídia depois). */
     raw: jsonb("raw"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
@@ -757,7 +776,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 9 as const;
+export const schemaVersion = 10 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -770,3 +789,80 @@ export type MessageType = (typeof messageTypeEnum.enumValues)[number];
 export type MessageStatus = (typeof messageStatusEnum.enumValues)[number];
 export type StageKind = (typeof stageKindEnum.enumValues)[number];
 export type AppointmentStatus = (typeof appointmentStatusEnum.enumValues)[number];
+
+/** Mensagem agendada por alguém da equipe numa conversa. */
+export const scheduledMessageStatusEnum = pgEnum("scheduled_message_status", [
+  "pending",
+  "sent",
+  "failed",
+  "canceled",
+]);
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    sendAt: timestamp("send_at", { withTimezone: true }).notNull(),
+    status: scheduledMessageStatusEnum("status").notNull().default("pending"),
+    error: text("error"),
+    messageId: uuid("message_id"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("scheduled_messages_due_idx").on(t.status, t.sendAt)],
+);
+
+/** Campanha (disparo em massa) com público filtrado e envio pela fila anti-bloqueio. */
+export type CampaignFilter = { stageIds?: string[]; tagIds?: string[]; lastContactDays?: number | null };
+export const campaignStatusEnum = pgEnum("campaign_status", ["running", "paused", "done", "canceled"]);
+export const campaigns = pgTable("campaigns", {
+  id: id(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  connectionId: uuid("connection_id").references(() => whatsappConnections.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  optOutFooter: boolean("opt_out_footer").notNull().default(true),
+  filter: jsonb("filter").$type<CampaignFilter>().notNull(),
+  status: campaignStatusEnum("status").notNull().default("running"),
+  startAt: timestamp("start_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const campaignRecipientStatusEnum = pgEnum("campaign_recipient_status", [
+  "pending",
+  "sending",
+  "sent",
+  "failed",
+  "skipped",
+]);
+export const campaignRecipients = pgTable(
+  "campaign_recipients",
+  {
+    id: id(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    status: campaignRecipientStatusEnum("status").notNull().default("pending"),
+    error: text("error"),
+    messageId: uuid("message_id"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("campaign_recipients_uq").on(t.campaignId, t.contactId),
+    index("campaign_recipients_status_idx").on(t.campaignId, t.status),
+  ],
+);

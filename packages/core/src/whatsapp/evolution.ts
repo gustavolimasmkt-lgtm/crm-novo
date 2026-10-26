@@ -28,6 +28,9 @@ export type InstanceInfo = {
   profileName: string | null;
 };
 
+/** Mensagem citada numa resposta. */
+export type Quoted = { externalId: string; text: string };
+
 export interface EvolutionApi {
   createInstance(instanceName: string): Promise<{ qr: QrCode | null }>;
   setWebhook(instanceName: string, url: string): Promise<void>;
@@ -42,7 +45,12 @@ export interface EvolutionApi {
     numbers: string[],
   ): Promise<{ number: string; exists: boolean; jid: string | null }[]>;
   /** delay (ms): a Evolution mostra "digitando..." por esse tempo antes de enviar. */
-  sendText(instanceName: string, to: string, text: string, opts?: { delay?: number }): Promise<SentMessage>;
+  sendText(
+    instanceName: string,
+    to: string,
+    text: string,
+    opts?: { delay?: number; quoted?: Quoted },
+  ): Promise<SentMessage>;
   sendMedia(
     instanceName: string,
     to: string,
@@ -52,8 +60,13 @@ export interface EvolutionApi {
       base64: string;
       fileName: string;
       caption?: string;
+      quoted?: Quoted;
     },
   ): Promise<SentMessage>;
+  /** Edita uma mensagem de texto enviada por nós. */
+  editText(instanceName: string, remoteJid: string, externalId: string, text: string): Promise<void>;
+  /** Apaga para todos uma mensagem enviada por nós. */
+  deleteForEveryone(instanceName: string, remoteJid: string, externalId: string): Promise<void>;
   sendAudio(instanceName: string, to: string, base64: string): Promise<SentMessage>;
   /** Baixa a mídia de uma mensagem (a partir da mensagem original guardada). */
   getMedia(
@@ -247,6 +260,9 @@ export function createEvolutionClient(opts: {
           number: to,
           text,
           ...(delay ? { delay } : {}),
+          ...(opts?.quoted
+            ? { quoted: { key: { id: opts.quoted.externalId }, message: { conversation: opts.quoted.text } } }
+            : {}),
         }),
       );
     },
@@ -261,8 +277,29 @@ export function createEvolutionClient(opts: {
           media: m.base64,
           fileName: m.fileName,
           ...(m.caption ? { caption: m.caption } : {}),
+          ...(m.quoted
+            ? { quoted: { key: { id: m.quoted.externalId }, message: { conversation: m.quoted.text } } }
+            : {}),
         }),
       );
+    },
+
+    async editText(instanceName, remoteJid, externalId, text) {
+      assertOwnedInstance(instanceName);
+      await call("POST", `/chat/updateMessage/${enc(instanceName)}`, {
+        number: remoteJid.split("@")[0],
+        key: { remoteJid, fromMe: true, id: externalId },
+        text,
+      });
+    },
+
+    async deleteForEveryone(instanceName, remoteJid, externalId) {
+      assertOwnedInstance(instanceName);
+      await call("DELETE", `/chat/deleteMessageForEveryone/${enc(instanceName)}`, {
+        id: externalId,
+        remoteJid,
+        fromMe: true,
+      });
     },
 
     async sendAudio(instanceName, to, base64) {

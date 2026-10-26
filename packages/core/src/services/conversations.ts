@@ -20,6 +20,7 @@ import {
   EvolutionError,
   jidToTarget,
   normalizePhoneInput,
+  type Quoted,
 } from "../whatsapp/evolution.js";
 import { previewOf } from "../whatsapp/parse.js";
 import { syncDealAssignee } from "./crm.js";
@@ -77,6 +78,8 @@ const listColumns = {
   assignedUserName: users.name,
   aiPaused: conversations.aiPaused,
   aiPausedReason: conversations.aiPausedReason,
+  aiSummary: conversations.aiSummary,
+  aiSummaryAt: conversations.aiSummaryAt,
 };
 
 function baseQuery(db: Database) {
@@ -140,7 +143,37 @@ export type MessageItem = {
   sentByAi: boolean;
   internal: boolean;
   transcript: string | null;
+  editedAt: Date | null;
+  deletedAt: Date | null;
+  automation: string | null;
+  quoted: { body: string | null; type: MessageType; fromMe: boolean } | null;
+  canEdit: boolean;
+  canDelete: boolean;
 };
+
+const EDIT_WINDOW_MS = 15 * 60_000;
+const DELETE_WINDOW_MS = 48 * 3600_000;
+
+/** Quem pode editar/apagar: quem enviou ou gestor; só mensagens nossas já aceitas pelo WhatsApp. */
+function modifiable(
+  actor: ActorU,
+  m: {
+    direction: string;
+    internal: boolean;
+    externalId: string | null;
+    deletedAt: Date | null;
+    sentByUserId: string | null;
+    sentAt: Date;
+  },
+) {
+  return (
+    m.direction === "out" &&
+    !m.internal &&
+    !!m.externalId &&
+    !m.deletedAt &&
+    (m.sentByUserId === actor.userId || can(actor, "deals.view_all"))
+  );
+}
 
 export async function listMessages(
   db: Database,
@@ -165,6 +198,21 @@ export async function listMessages(
       sentByAi: messages.sentByAi,
       internal: messages.internal,
       transcript: messages.transcript,
+      editedAt: messages.editedAt,
+      deletedAt: messages.deletedAt,
+      automation: messages.automation,
+      externalId: messages.externalId,
+      sentByUserId: messages.sentByUserId,
+      quotedBody: sql<
+        string | null
+      >`(select q.body from messages q where q.conversation_id = ${messages.conversationId}
+        and (q.id = ${messages.quotedId} or q.external_id = ${messages.quotedExternalId}) limit 1)`,
+      quotedType: sql<MessageType | null>`(select q.type from messages q where q.conversation_id = ${messages.conversationId}
+        and (q.id = ${messages.quotedId} or q.external_id = ${messages.quotedExternalId}) limit 1)`,
+      quotedDirection: sql<
+        string | null
+      >`(select q.direction from messages q where q.conversation_id = ${messages.conversationId}
+        and (q.id = ${messages.quotedId} or q.external_id = ${messages.quotedExternalId}) limit 1)`,
     })
     .from(messages)
     .leftJoin(users, eq(users.id, messages.sentByUserId))
@@ -176,7 +224,16 @@ export async function listMessages(
     )
     .orderBy(desc(messages.sentAt), desc(messages.createdAt))
     .limit(Math.min(opts.limit ?? 60, 200));
-  return rows.reverse();
+  const now = Date.now();
+  return rows.reverse().map(({ externalId, sentByUserId, quotedBody, quotedType, quotedDirection, ...m }) => {
+    const mod = modifiable(actor, { ...m, externalId, sentByUserId });
+    return {
+      ...m,
+      quoted: quotedType ? { body: quotedBody, type: quotedType, fromMe: quotedDirection === "out" } : null,
+      canEdit: mod && m.type === "text" && now - m.sentAt.getTime() < EDIT_WINDOW_MS,
+      canDelete: mod && now - m.sentAt.getTime() < DELETE_WINDOW_MS,
+    };
+  });
 }
 
 export async function markConversationRead(db: Database, actor: ActorU, organizationId: string, id: string) {
@@ -260,6 +317,7 @@ export async function listAssignableUsers(db: Database, organizationId: string) 
 }
 
 export const sendInput = z.object({
+  replyTo: z.string().uuid().optional(),
   text: z.string().max(4096, "Mensagem longa demais (máximo 4096 caracteres).").optional(),
   file: z
     .object({ name: z.string().max(200), mime: z.string().max(120), data: z.instanceof(Buffer) })
@@ -302,6 +360,15 @@ export async function sendMessage(
   if (input.file && input.file.data.length > MAX_MEDIA_BYTES)
     throw new AppError("validation", "Arquivo grande demais (máximo 16 MB).");
   const { conv, connection, contact } = await loadSendContext(db, actor, organizationId, conversationId);
+  const target = input.replyTo
+    ? await db.query.messages.findFirst({
+        where: and(eq(messages.id, input.replyTo), eq(messages.conversationId, conversationId)),
+      })
+    : null;
+  const quoted =
+    target?.externalId && !target.internal
+      ? { externalId: target.externalId, text: target.body ?? previewOf(target.type, null) }
+      : undefined;
 
   const type: MessageType = input.file ? kindOf(input.file.mime) : "text";
   const [msg] = await db
@@ -317,6 +384,8 @@ export async function sendMessage(
       mediaName: input.file?.name ?? null,
       status: "pending",
       sentByUserId: actor.userId,
+      quotedId: quoted ? target?.id : null,
+      quotedExternalId: quoted?.externalId ?? null,
     })
     .returning();
   if (!msg) throw new Error("Falha ao gravar mensagem");
@@ -356,6 +425,7 @@ export async function sendMessage(
     type,
     text,
     file: input.file,
+    quoted,
   });
   return msg.id;
 }
@@ -372,12 +442,16 @@ async function deliver(
     text: string | null;
     file?: { name: string; mime: string; data: Buffer };
     delay?: number;
+    quoted?: Quoted;
   },
 ) {
   try {
     let r: Awaited<ReturnType<EvolutionApi["sendText"]>>;
     if (!m.file)
-      r = await evo.sendText(instanceName, to, m.text ?? "", m.delay ? { delay: m.delay } : undefined);
+      r = await evo.sendText(instanceName, to, m.text ?? "", {
+        ...(m.delay ? { delay: m.delay } : {}),
+        ...(m.quoted ? { quoted: m.quoted } : {}),
+      });
     else if (m.type === "audio") r = await evo.sendAudio(instanceName, to, m.file.data.toString("base64"));
     else
       r = await evo.sendMedia(instanceName, to, {
@@ -386,6 +460,7 @@ async function deliver(
         base64: m.file.data.toString("base64"),
         fileName: m.file.name,
         caption: m.text ?? undefined,
+        quoted: m.quoted,
       });
     // O eco (send.message/messages.upsert) pode chegar antes desta resposta; se já gravou, une os dois.
     // Une com o eco numa transação; se o eco entrar no meio, tenta de novo.
@@ -595,6 +670,8 @@ export async function sendAiMessage(
     automation?: string;
     /** Mostra "digitando..." antes, proporcional ao tamanho do texto. */
     typing?: boolean;
+    /** Envio em nome de uma pessoa (campanha): não marca como IA. */
+    byUserId?: string;
   } = {},
 ) {
   const { image } = opts;
@@ -621,7 +698,8 @@ export async function sendAiMessage(
       mediaMime: image?.mime ?? null,
       mediaName: image?.name ?? null,
       status: "pending",
-      sentByAi: true,
+      sentByAi: !opts.byUserId,
+      sentByUserId: opts.byUserId ?? null,
       automation: opts.automation ?? null,
     })
     .returning();
@@ -710,4 +788,66 @@ export async function transcribeMessage(
     .where(eq(messages.id, msg.id));
   await notifyOrg(db, { o: organizationId, t: "message", c: msg.conversationId });
   return text || "(áudio sem fala)";
+}
+
+async function ownMessage(db: Database, actor: ActorU, organizationId: string, messageId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(messageId)) throw new AppError("not_found", "Mensagem não encontrada.");
+  const msg = await db.query.messages.findFirst({
+    where: and(eq(messages.id, messageId), eq(messages.organizationId, organizationId)),
+  });
+  if (!msg) throw new AppError("not_found", "Mensagem não encontrada.");
+  const conv = await getConversation(db, actor, organizationId, msg.conversationId);
+  if (!modifiable(actor, msg))
+    throw new AppError("forbidden", "Só dá para mexer em mensagens enviadas por você.");
+  const connection = await db.query.whatsappConnections.findFirst({
+    where: eq(whatsappConnections.id, msg.connectionId),
+  });
+  const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, conv.contactId) });
+  if (!connection || !contact || connection.status !== "open")
+    throw new AppError("validation", "A conexão de WhatsApp está desconectada.");
+  return { msg, connection, contact };
+}
+
+/** Edita uma mensagem de texto enviada (até 15 minutos, como no WhatsApp). */
+export async function editMessage(
+  db: Database,
+  evo: EvolutionApi,
+  actor: ActorU,
+  organizationId: string,
+  messageId: string,
+  text: string,
+) {
+  const { msg, connection, contact } = await ownMessage(db, actor, organizationId, messageId);
+  const body = text.trim();
+  if (!body) throw new AppError("validation", "Escreva a mensagem.");
+  if (body.length > 4096) throw new AppError("validation", "Mensagem longa demais.");
+  if (msg.type !== "text" || Date.now() - msg.sentAt.getTime() > EDIT_WINDOW_MS)
+    throw new AppError("validation", "Só dá para editar texto até 15 minutos depois de enviar.");
+  try {
+    await evo.editText(connection.instanceName, contact.waJid, msg.externalId ?? "", body);
+  } catch (e) {
+    throw new AppError("integration", `O WhatsApp não aceitou a edição: ${(e as Error).message}`);
+  }
+  await db.update(messages).set({ body, editedAt: new Date() }).where(eq(messages.id, msg.id));
+  await notifyOrg(db, { o: organizationId, t: "message", c: msg.conversationId });
+}
+
+/** Apaga para todos uma mensagem enviada (até 48 horas). Fica registrada no CRM como apagada. */
+export async function deleteMessage(
+  db: Database,
+  evo: EvolutionApi,
+  actor: ActorU,
+  organizationId: string,
+  messageId: string,
+) {
+  const { msg, connection, contact } = await ownMessage(db, actor, organizationId, messageId);
+  if (Date.now() - msg.sentAt.getTime() > DELETE_WINDOW_MS)
+    throw new AppError("validation", "O WhatsApp só deixa apagar para todos até 48 horas depois.");
+  try {
+    await evo.deleteForEveryone(connection.instanceName, contact.waJid, msg.externalId ?? "");
+  } catch (e) {
+    throw new AppError("integration", `O WhatsApp não aceitou apagar: ${(e as Error).message}`);
+  }
+  await db.update(messages).set({ deletedAt: new Date() }).where(eq(messages.id, msg.id));
+  await notifyOrg(db, { o: organizationId, t: "message", c: msg.conversationId });
 }

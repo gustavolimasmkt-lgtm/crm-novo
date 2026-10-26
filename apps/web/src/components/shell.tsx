@@ -10,6 +10,7 @@ import {
   KanbanSquare,
   ListTodo,
   LogOut,
+  Megaphone,
   Menu,
   MessageCircle,
   Package,
@@ -61,6 +62,7 @@ export function Shell({
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
       : []),
     ...(canConfigure ? [{ href: "/agente", label: "Agente de IA", icon: <Bot size={20} /> }] : []),
+    ...(canConfigure ? [{ href: "/campanhas", label: "Campanhas", icon: <Megaphone size={20} /> }] : []),
     { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
     ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
   ];

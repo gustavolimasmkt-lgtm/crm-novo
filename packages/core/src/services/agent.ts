@@ -32,6 +32,7 @@ import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
 import { conversationLink, notifyUser, pickNextAssignee } from "./rotation.js";
 import { bookByAi, brDateTime, checkSlot, formatBr, freeSlots, getScheduleSettings } from "./schedule.js";
+import { summarizeConversation, summaryText } from "./summary.js";
 
 type ActorU = Actor & { userId: string };
 
@@ -593,6 +594,7 @@ async function alertHuman(
   deal: { id: string; assignedUserId: string | null } | null,
   contact: { name: string | null; pushName: string | null; phone: string | null } | null,
   reason: string,
+  ai?: AiClient,
 ) {
   let userId = conv.assignedUserId ?? deal?.assignedUserId ?? null;
   if (!userId) {
@@ -606,12 +608,21 @@ async function alertHuman(
   }
   const link = conversationLink(conv.id);
   const who = contact?.name ?? contact?.pushName ?? contact?.phone ?? "cliente";
+  // Resumo do atendimento para o vendedor já chegar sabendo (se falhar, avisa sem resumo).
+  let summary = "";
+  if (ai)
+    summary = await summarizeConversation(db, ai, organizationId, conv.id)
+      .then((s) => `\n\n${summaryText(s)}`)
+      .catch((e) => {
+        console.error(`[resumo] conversa ${conv.id}:`, (e as Error)?.message ?? e);
+        return "";
+      });
   await notifyUser(
     db,
     organizationId,
     conv.connectionId,
     userId,
-    `🙋 ATENDIMENTO HUMANO NECESSÁRIO\nCliente: ${who}${contact?.phone ? ` (${contact.phone})` : ""}\nMotivo: ${reason}${link ? `\nAbrir conversa: ${link}` : ""}`,
+    `🙋 ATENDIMENTO HUMANO NECESSÁRIO\nCliente: ${who}${contact?.phone ? ` (${contact.phone})` : ""}\nMotivo: ${reason}${summary}${link ? `\n\nAbrir conversa: ${link}` : ""}`,
   );
   await notifyOrg(db, { o: organizationId, t: "conversation", c: conv.id });
 }
@@ -636,10 +647,13 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
         body: messages.body,
         mediaName: messages.mediaName,
         sentByAi: messages.sentByAi,
+        automation: messages.automation,
         sentAt: messages.sentAt,
       })
       .from(messages)
-      .where(and(eq(messages.conversationId, conv.id), eq(messages.internal, false)))
+      .where(
+        and(eq(messages.conversationId, conv.id), eq(messages.internal, false), isNull(messages.deletedAt)),
+      )
       // Ordem de chegada: o horário do WhatsApp tem precisão de segundos e pode "voltar" em relação ao nosso.
       .orderBy(desc(messages.createdAt))
       .limit(agent.historyMessages);
@@ -648,7 +662,10 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
   if (!last || last.direction !== "in") return "nada-novo";
   // Alguém da equipe falou com o cliente há pouco (pelo CRM ou pelo celular): a IA não atravessa.
   const since = Date.now() - HUMAN_WINDOW_MIN * 60_000;
-  if (recent.some((m) => m.direction === "out" && !m.sentByAi && m.sentAt.getTime() > since)) {
+  // Campanha (automation) não conta como atendente: a IA pode responder quem respondeu ao disparo.
+  if (
+    recent.some((m) => m.direction === "out" && !m.sentByAi && !m.automation && m.sentAt.getTime() > since)
+  ) {
     await pauseAi(db, organizationId, conv.id, "Um atendente está conversando");
     return "humano-ativo";
   }
@@ -747,7 +764,7 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
   }
   if (effects.transfer) {
     await pauseAi(db, organizationId, conv.id, `Transferida pela IA: ${effects.transfer}`);
-    await alertHuman(db, organizationId, conv, deal ?? null, contact ?? null, effects.transfer);
+    await alertHuman(db, organizationId, conv, deal ?? null, contact ?? null, effects.transfer, deps.ai);
     if (deal)
       await db.insert(dealEvents).values({
         organizationId,

@@ -10,6 +10,7 @@ import {
   FileText,
   MapPin,
   MessageSquarePlus,
+  MoreHorizontal,
   Paperclip,
   Search,
   SendHorizontal,
@@ -51,6 +52,8 @@ type Conv = {
   assignedUserName: string | null;
   aiPaused: boolean;
   aiPausedReason: string | null;
+  aiSummary: LeadSummary | null;
+  aiSummaryAt: string | null;
 };
 type Msg = {
   id: string;
@@ -66,14 +69,50 @@ type Msg = {
   sentByAi: boolean;
   internal: boolean;
   transcript: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  automation: string | null;
+  quoted: { body: string | null; type: Msg["type"]; fromMe: boolean } | null;
+  canEdit: boolean;
+  canDelete: boolean;
+};
+type Scheduled = { id: string; body: string; sendAt: string; createdByName: string | null };
+type LeadSummary = {
+  resumo: string;
+  interesse: string | null;
+  temperatura: "quente" | "morno" | "frio";
+  nota: number;
+  proximoPasso: string | null;
+  objecoes: string | null;
 };
 type QuickReply = { id: string; shortcut: string; body: string };
 
 /** Recursos extras da caixa de entrada (respostas rápidas, transcrição). */
-const Extras = createContext<{ quickReplies: QuickReply[]; sttEnabled: boolean }>({
+const Extras = createContext<{ quickReplies: QuickReply[]; sttEnabled: boolean; aiEnabled: boolean }>({
   quickReplies: [],
   sttEnabled: false,
+  aiEnabled: false,
 });
+
+const AUTOMATION_LABEL: Record<string, string> = {
+  followup: "Follow-up",
+  reminder: "Lembrete",
+  campaign: "Campanha",
+};
+
+function snippet(m: { body: string | null; type: Msg["type"] }) {
+  if (m.body) return m.body.length > 120 ? `${m.body.slice(0, 120)}…` : m.body;
+  const labels: Record<string, string> = {
+    image: "Foto",
+    audio: "Áudio",
+    video: "Vídeo",
+    document: "Documento",
+    sticker: "Figurinha",
+    location: "Localização",
+    contact: "Contato",
+  };
+  return labels[m.type] ?? "Mensagem";
+}
 
 function fillReply(body: string, contactName: string) {
   const first = contactName.trim().split(/\s+/)[0] ?? "";
@@ -86,7 +125,7 @@ function fillReply(body: string, contactName: string) {
 }
 type Connection = { id: string; name: string; phone: string | null; status: string };
 type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
-type ThreadData = { conversation: Conv; messages: Msg[]; deal: DealChip | null };
+type ThreadData = { conversation: Conv; messages: Msg[]; deal: DealChip | null; scheduled: Scheduled[] };
 type Person = { id: string; name: string };
 
 const FILTERS: { id: Filter; label: string }[] = [
@@ -115,6 +154,7 @@ export function Inbox({
   agentActive,
   quickReplies = [],
   sttEnabled = false,
+  aiEnabled = false,
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -126,8 +166,12 @@ export function Inbox({
   agentActive: boolean;
   quickReplies?: QuickReply[];
   sttEnabled?: boolean;
+  aiEnabled?: boolean;
 }) {
-  const extras = useMemo(() => ({ quickReplies, sttEnabled }), [quickReplies, sttEnabled]);
+  const extras = useMemo(
+    () => ({ quickReplies, sttEnabled, aiEnabled }),
+    [quickReplies, sttEnabled, aiEnabled],
+  );
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
   const [list, setList] = useState<Conv[]>(initial);
@@ -412,6 +456,14 @@ function Thread({
   const bottom = useRef<HTMLDivElement>(null);
   const count = thread?.messages.length ?? 0;
   const [actionError, setActionError] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<Msg | null>(null);
+  const [editing, setEditing] = useState<Msg | null>(null);
+  // Trocou de conversa: limpa resposta/edição em andamento.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reage só à troca de conversa
+  useEffect(() => {
+    setReplyTo(null);
+    setEditing(null);
+  }, [id]);
 
   useEffect(() => {
     if (count) bottom.current?.scrollIntoView({ block: "end" });
@@ -538,6 +590,8 @@ function Thread({
         </div>
       )}
 
+      {c && <SummaryBar conv={c} onChanged={onChanged} />}
+
       {actionError && (
         <div className="px-4 pt-3">
           <Notice>{actionError}</Notice>
@@ -558,14 +612,41 @@ function Thread({
               </span>
             </div>
             {g.items.map((m) => (
-              <Bubble key={m.id} m={m} onRetry={onChanged} />
+              <Bubble
+                key={m.id}
+                m={m}
+                onRetry={onChanged}
+                onReply={() => {
+                  setEditing(null);
+                  setReplyTo(m);
+                }}
+                onEdit={() => {
+                  setReplyTo(null);
+                  setEditing(m);
+                }}
+                onError={setActionError}
+              />
             ))}
           </div>
         ))}
         <div ref={bottom} />
       </div>
 
-      {c && <Composer id={id} contactName={contactLabel(c)} onSent={onChanged} />}
+      {c && (
+        <Composer
+          key={id}
+          id={id}
+          contactName={contactLabel(c)}
+          onSent={onChanged}
+          replyTo={replyTo}
+          editing={editing}
+          onCancel={() => {
+            setReplyTo(null);
+            setEditing(null);
+          }}
+          scheduled={thread?.scheduled ?? []}
+        />
+      )}
     </>
   );
 }
@@ -667,9 +748,96 @@ function AudioMessage({ m, src, out }: { m: Msg; src: string; out: boolean }) {
   );
 }
 
-function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
+const TEMP: Record<LeadSummary["temperatura"], { label: string; cls: string }> = {
+  quente: { label: "Quente", cls: "bg-danger-soft text-danger" },
+  morno: { label: "Morno", cls: "bg-warn-soft text-warn" },
+  frio: { label: "Frio", cls: "bg-fill text-ink-2" },
+};
+
+function SummaryBar({ conv, onChanged }: { conv: Conv; onChanged: () => void }) {
+  const { aiEnabled } = useContext(Extras);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const s = conv.aiSummary;
+  if (!aiEnabled && !s) return null;
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/conversas/${conv.id}/resumo`, { method: "POST" });
+      setOpen(true);
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="border-b border-separator px-4 py-1.5 text-[13px]" data-testid="resumo-ia">
+      <div className="flex items-center gap-2">
+        {s ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <span
+              className={cx(
+                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                TEMP[s.temperatura].cls,
+              )}
+            >
+              {TEMP[s.temperatura].label} · {s.nota}/10
+            </span>
+            <span className="truncate text-ink-2">{s.interesse ?? s.resumo}</span>
+          </button>
+        ) : (
+          <span className="flex-1 text-ink-3">Sem resumo da IA</span>
+        )}
+        {aiEnabled && (
+          <button type="button" disabled={busy} onClick={run} className="shrink-0 font-semibold text-accent">
+            {busy ? "Resumindo..." : s ? "Atualizar" : "Resumir com IA"}
+          </button>
+        )}
+      </div>
+      {s && open && (
+        <div className="mt-2 space-y-1 rounded-xl bg-fill/70 p-3 text-[13px] text-ink">
+          <p>{s.resumo}</p>
+          {s.objecoes && (
+            <p>
+              <span className="font-semibold">Objeções:</span> {s.objecoes}
+            </p>
+          )}
+          {s.proximoPasso && (
+            <p>
+              <span className="font-semibold">Próximo passo:</span> {s.proximoPasso}
+            </p>
+          )}
+        </div>
+      )}
+      {err && <p className="mt-1 text-danger">{err}</p>}
+    </div>
+  );
+}
+
+function Bubble({
+  m,
+  onRetry,
+  onReply,
+  onEdit,
+  onError,
+}: {
+  m: Msg;
+  onRetry: () => void;
+  onReply: () => void;
+  onEdit: () => void;
+  onError: (e: string | null) => void;
+}) {
   const out = m.direction === "out";
   const [retrying, setRetrying] = useState(false);
+  const [menu, setMenu] = useState(false);
   if (m.internal)
     return (
       <div className="mb-1.5 flex justify-end" data-testid="note">
@@ -683,21 +851,65 @@ function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
       </div>
     );
   const showBody = m.body && m.type !== "location";
+  const deleted = !!m.deletedAt;
+  async function remove() {
+    setMenu(false);
+    if (!confirm("Apagar esta mensagem para todos?")) return;
+    onError(null);
+    try {
+      await api(`/api/mensagens/${m.id}`, { method: "DELETE" });
+      onRetry();
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  }
   return (
-    <div className={cx("mb-1.5 flex", out ? "justify-end" : "justify-start")} data-testid="message">
+    <div
+      className={cx("group mb-1.5 flex items-center gap-1", out ? "justify-end" : "justify-start")}
+      data-testid="message"
+    >
+      {out && !deleted && (
+        <MessageMenu
+          open={menu}
+          setOpen={setMenu}
+          m={m}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={remove}
+        />
+      )}
       <div
         className={cx(
           "max-w-[82%] rounded-[18px] px-3 py-2 md:max-w-[65%]",
           out ? "rounded-br-md bg-accent text-white" : "rounded-bl-md bg-fill text-ink",
           m.status === "failed" && "bg-danger-soft text-danger",
+          deleted && "opacity-70",
         )}
       >
-        {m.type !== "text" && <Media m={m} out={out} />}
+        {m.quoted && (
+          <div
+            className={cx(
+              "mb-1.5 rounded-lg border-l-4 px-2 py-1 text-[13px]",
+              out ? "border-white/60 bg-white/15" : "border-accent bg-surface",
+            )}
+            data-testid="citacao"
+          >
+            <p className="font-semibold">{m.quoted.fromMe ? "Você" : "Cliente"}</p>
+            <p className="line-clamp-2 opacity-90">{snippet(m.quoted)}</p>
+          </div>
+        )}
+        {deleted && (
+          <p className="mb-1 text-[13px] italic" data-testid="apagada">
+            {out ? "Você apagou esta mensagem" : "O cliente apagou esta mensagem"}
+          </p>
+        )}
+        {m.type !== "text" && !deleted && <Media m={m} out={out} />}
         {showBody && (
           <p
             className={cx(
               "whitespace-pre-wrap break-words text-[15px] leading-snug",
               m.type !== "text" && "mt-1.5",
+              deleted && "text-[13px] line-through",
             )}
           >
             {m.body}
@@ -712,6 +924,10 @@ function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
             out ? "text-white/75" : "text-ink-3",
           )}
         >
+          {m.automation && AUTOMATION_LABEL[m.automation] && (
+            <span className="mr-1 font-semibold">{AUTOMATION_LABEL[m.automation]}</span>
+          )}
+          {m.editedAt && <span className="mr-1 italic">editada</span>}
           {out && m.sentByAi && <span className="mr-1 font-semibold">IA</span>}
           {out && !m.sentByAi && m.sentByName && (
             <span className="mr-1 truncate">{m.sentByName.split(" ")[0]}</span>
@@ -735,13 +951,132 @@ function Bubble({ m, onRetry }: { m: Msg; onRetry: () => void }) {
           </button>
         )}
       </div>
+      {!out && !deleted && (
+        <MessageMenu
+          open={menu}
+          setOpen={setMenu}
+          m={m}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={remove}
+        />
+      )}
     </div>
   );
 }
 
-function Composer({ id, contactName, onSent }: { id: string; contactName: string; onSent: () => void }) {
+function MessageMenu({
+  open,
+  setOpen,
+  m,
+  onReply,
+  onEdit,
+  onDelete,
+}: {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  m: Msg;
+  onReply: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const canReply = m.status !== "failed" && m.status !== "pending";
+  if (!canReply && !m.canEdit && !m.canDelete) return null;
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-label="Ações da mensagem"
+        className="rounded-full p-1 text-ink-3 opacity-60 hover:bg-fill hover:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div
+          className={cx(
+            "absolute top-7 z-20 w-44 rounded-xl bg-surface p-1 text-[14px] shadow-lg ring-1 ring-separator",
+            m.direction === "out" ? "right-0" : "left-0",
+          )}
+        >
+          {canReply && (
+            <button
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-fill"
+              onClick={() => {
+                setOpen(false);
+                onReply();
+              }}
+            >
+              Responder
+            </button>
+          )}
+          {m.canEdit && (
+            <button
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-fill"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+            >
+              Editar
+            </button>
+          )}
+          {m.canDelete && (
+            <button
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left text-danger hover:bg-fill"
+              onClick={onDelete}
+            >
+              Apagar para todos
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const whenFmt = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function Composer({
+  id,
+  contactName,
+  onSent,
+  replyTo,
+  editing,
+  onCancel,
+  scheduled,
+}: {
+  id: string;
+  contactName: string;
+  onSent: () => void;
+  replyTo: Msg | null;
+  editing: Msg | null;
+  onCancel: () => void;
+  scheduled: Scheduled[];
+}) {
   const { quickReplies } = useContext(Extras);
   const [text, setText] = useState("");
+  const [scheduleAt, setScheduleAt] = useState<string | null>(null);
+  // Entrou em modo edição: traz o texto da mensagem.
+  useEffect(() => {
+    if (editing) {
+      setText(editing.body ?? "");
+      setScheduleAt(null);
+      areaRef.current?.focus();
+    }
+  }, [editing]);
+  useEffect(() => {
+    if (replyTo) areaRef.current?.focus();
+  }, [replyTo]);
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState(false);
   const [sending, setSending] = useState(false);
@@ -771,18 +1106,28 @@ function Composer({ id, contactName, onSent }: { id: string; contactName: string
     if (sending || (!text.trim() && !file)) return;
     setSending(true);
     setError(null);
+    const json = (body: unknown) => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
     try {
-      if (note) {
-        await api(`/api/conversas/${id}/notas`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
+      if (editing) {
+        await api(`/api/mensagens/${editing.id}/editar`, json({ text }));
+        onCancel();
+      } else if (note) {
+        await api(`/api/conversas/${id}/notas`, json({ text }));
+      } else if (scheduleAt !== null) {
+        if (!scheduleAt) throw new Error("Escolha dia e hora para agendar.");
+        await api(`/api/conversas/${id}/agendar`, json({ text, sendAt: scheduleAt }));
+        setScheduleAt(null);
       } else {
         const fd = new FormData();
         if (text.trim()) fd.set("text", text);
         if (file) fd.set("file", file);
+        if (replyTo) fd.set("replyTo", replyTo.id);
         await api(`/api/conversas/${id}/mensagens`, { method: "POST", body: fd });
+        if (replyTo) onCancel();
       }
       setText("");
       setFile(null);
@@ -832,6 +1177,62 @@ function Composer({ id, contactName, onSent }: { id: string; contactName: string
           ))}
         </ul>
       )}
+      {scheduled.length > 0 && !editing && (
+        <ul className="mb-2 space-y-1" data-testid="agendadas">
+          {scheduled.map((sm) => (
+            <li key={sm.id} className="flex items-center gap-2 rounded-xl bg-fill px-3 py-1.5 text-[13px]">
+              <Clock size={14} className="shrink-0 text-ink-2" />
+              <span className="shrink-0 font-medium">{whenFmt.format(new Date(sm.sendAt))}</span>
+              <span className="min-w-0 flex-1 truncate text-ink-2">{sm.body}</span>
+              <button
+                type="button"
+                className="shrink-0 font-semibold text-danger"
+                onClick={async () => {
+                  await api(`/api/agendadas/${sm.id}`, { method: "DELETE" }).catch(() => {});
+                  onSent();
+                }}
+              >
+                Cancelar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(replyTo || editing) && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border-l-4 border-accent bg-fill px-3 py-1.5 text-[13px]">
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-semibold">{editing ? "Editando: " : "Respondendo: "}</span>
+            {snippet((editing ?? replyTo) as Msg)}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (editing) setText("");
+              onCancel();
+            }}
+            aria-label="Cancelar"
+            className="text-ink-2"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {scheduleAt !== null && !editing && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-accent-soft px-3 py-1.5 text-[13px] text-accent">
+          <Clock size={14} />
+          <span className="font-medium">Agendar para</span>
+          <input
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(e) => setScheduleAt(e.target.value)}
+            aria-label="Agendar para"
+            className="rounded-lg bg-surface px-2 py-1 text-ink"
+          />
+          <button type="button" onClick={() => setScheduleAt(null)} className="ml-auto font-semibold">
+            Cancelar
+          </button>
+        </div>
+      )}
       {note && (
         <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-warn">
           <StickyNote size={12} /> Nota interna: só a equipe vê, não vai para o cliente.
@@ -862,7 +1263,7 @@ function Composer({ id, contactName, onSent }: { id: string; contactName: string
           data-testid="file-input"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
-        {!note && (
+        {!note && !editing && scheduleAt === null && (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -872,20 +1273,40 @@ function Composer({ id, contactName, onSent }: { id: string; contactName: string
             <Paperclip size={20} />
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setNote((v) => !v)}
-          aria-pressed={note}
-          aria-label="Nota interna"
-          title="Nota interna"
-          className={cx(
-            "mb-1 rounded-full p-2 hover:bg-fill",
-            note ? "bg-warn-soft text-warn" : "text-ink-2",
-          )}
-        >
-          <StickyNote size={20} />
-        </button>
-        {!note && quickReplies.length > 0 && (
+        {!editing && !note && !file && (
+          <button
+            type="button"
+            onClick={() => setScheduleAt((v) => (v === null ? "" : null))}
+            aria-pressed={scheduleAt !== null}
+            aria-label="Agendar mensagem"
+            title="Agendar mensagem"
+            className={cx(
+              "mb-1 rounded-full p-2 hover:bg-fill",
+              scheduleAt !== null ? "bg-accent-soft text-accent" : "text-ink-2",
+            )}
+          >
+            <Clock size={20} />
+          </button>
+        )}
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setNote((v) => !v);
+              setScheduleAt(null);
+            }}
+            aria-pressed={note}
+            aria-label="Nota interna"
+            title="Nota interna"
+            className={cx(
+              "mb-1 rounded-full p-2 hover:bg-fill",
+              note ? "bg-warn-soft text-warn" : "text-ink-2",
+            )}
+          >
+            <StickyNote size={20} />
+          </button>
+        )}
+        {!note && !editing && quickReplies.length > 0 && (
           <button
             type="button"
             onClick={() => {
@@ -947,9 +1368,19 @@ function Composer({ id, contactName, onSent }: { id: string; contactName: string
             "mb-0.5 flex h-9 w-9 items-center justify-center rounded-full text-white transition disabled:opacity-30",
             note ? "bg-warn" : "bg-accent",
           )}
-          aria-label={note ? "Salvar nota" : "Enviar"}
+          aria-label={
+            note ? "Salvar nota" : editing ? "Salvar edição" : scheduleAt !== null ? "Agendar" : "Enviar"
+          }
         >
-          {note ? <StickyNote size={16} /> : <SendHorizontal size={18} />}
+          {note ? (
+            <StickyNote size={16} />
+          ) : scheduleAt !== null ? (
+            <Clock size={16} />
+          ) : editing ? (
+            <Check size={16} />
+          ) : (
+            <SendHorizontal size={18} />
+          )}
         </button>
       </div>
     </form>

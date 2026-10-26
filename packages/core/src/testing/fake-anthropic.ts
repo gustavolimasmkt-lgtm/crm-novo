@@ -96,6 +96,21 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
         return text("Tudo bem! Obrigado pelo contato.");
       }
       const line = userText ?? "";
+      // Resumo do atendimento (JSON).
+      if (String((b as { system?: string }).system ?? "").includes("Responda só com JSON")) {
+        const conv = String(b.messages?.[0]?.content ?? "");
+        return text(
+          JSON.stringify({
+            resumo:
+              `Cliente conversou sobre carros. ${conv.includes("vendedor") ? "Pediu um vendedor." : ""}`.trim(),
+            interesse: /hrv/i.test(conv) ? "Honda HR-V" : null,
+            temperatura: /vendedor|visita/i.test(conv) ? "quente" : "morno",
+            nota: /vendedor|visita/i.test(conv) ? 8 : 5,
+            proximo_passo: "Ligar hoje e oferecer visita",
+            objecoes: null,
+          }),
+        );
+      }
       // Follow-up: o sistema pede uma retomada.
       if (line.startsWith("[Aviso do sistema")) {
         const fromClient = (b.messages ?? []).filter(

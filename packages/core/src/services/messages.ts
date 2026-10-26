@@ -1,4 +1,5 @@
 import {
+  campaignRecipients,
   contacts,
   conversations,
   type Database,
@@ -11,7 +12,13 @@ import {
 } from "@crm/db";
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { phoneVariants } from "../whatsapp/evolution.js";
-import { type ParsedMessage, parseMessage, parseStatus, previewOf } from "../whatsapp/parse.js";
+import {
+  type ParsedMessage,
+  parseMessage,
+  parseProtocol,
+  parseStatus,
+  previewOf,
+} from "../whatsapp/parse.js";
 import { maybeEnqueueAi } from "./agent.js";
 import { autoCreateDeal } from "./crm.js";
 import { notifyOrg } from "./events.js";
@@ -111,6 +118,45 @@ async function isTeamPhone(db: Database, organizationId: string, phone: string |
   return !!hit;
 }
 
+const OPT_OUT = /^\s*(sair|parar|pare|stop|cancelar|descadastrar|remover)\s*[.!]*\s*$/i;
+
+async function optOutContact(db: Database, c: Connection, conversationId: string, contactId: string) {
+  const [row] = await db
+    .update(contacts)
+    .set({ optOut: true })
+    .where(and(eq(contacts.id, contactId), eq(contacts.optOut, false)))
+    .returning({ id: contacts.id });
+  if (!row) return;
+  await db
+    .update(campaignRecipients)
+    .set({ status: "skipped", error: "pediu para sair" })
+    .where(and(eq(campaignRecipients.contactId, contactId), eq(campaignRecipients.status, "pending")));
+  await db.insert(messages).values({
+    organizationId: c.organizationId,
+    conversationId,
+    connectionId: c.id,
+    direction: "out",
+    type: "text",
+    body: "Cliente pediu para sair das campanhas. Não recebe mais disparos.",
+    status: "sent",
+    internal: true,
+  });
+}
+
+/** Mensagem apagada para todos ou editada no WhatsApp. */
+async function applyProtocol(
+  db: Database,
+  c: Connection,
+  p: { kind: "revoke"; targetId: string } | { kind: "edit"; targetId: string; text: string },
+) {
+  const [row] = await db
+    .update(messages)
+    .set(p.kind === "revoke" ? { deletedAt: new Date() } : { body: p.text, editedAt: new Date() })
+    .where(and(eq(messages.connectionId, c.id), eq(messages.externalId, p.targetId)))
+    .returning({ conversationId: messages.conversationId });
+  if (row) await notifyOrg(db, { o: c.organizationId, t: "message", c: row.conversationId });
+}
+
 export async function storeParsedMessage(db: Database, c: Connection, p: ParsedMessage) {
   const { conversation, contact } = await upsertContactAndConversation(db, c, p);
   const [msg] = await db
@@ -128,6 +174,7 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
       status: p.fromMe ? "sent" : "read",
       raw: p.raw,
       sentAt: p.sentAt,
+      quotedExternalId: p.quotedExternalId,
     })
     .onConflictDoNothing({ target: [messages.connectionId, messages.externalId] })
     .returning({ id: messages.id });
@@ -148,6 +195,9 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     })
     .where(eq(conversations.id, conversation.id));
   // Lead novo entra sozinho no funil padrão.
+  // "SAIR": não recebe mais campanhas.
+  if (!p.fromMe && p.type === "text" && OPT_OUT.test(p.body ?? ""))
+    await optOutContact(db, c, conversation.id, contact.id);
   // Quem escreve é alguém da equipe (ex.: respondendo um aviso): não vira lead nem recebe IA.
   if (!p.fromMe && !(await isTeamPhone(db, c.organizationId, contact.phone))) {
     const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id);
@@ -182,6 +232,11 @@ export async function processMessageEvent(db: Database, c: Connection, event: st
   const items = Array.isArray(data) ? data : [data];
   if (event === "messages.upsert" || event === "send.message") {
     for (const item of items) {
+      const proto = parseProtocol(item);
+      if (proto) {
+        await applyProtocol(db, c, proto);
+        continue;
+      }
       const p = parseMessage(item);
       if ("skip" in p) continue;
       await storeParsedMessage(db, c, p);

@@ -36,6 +36,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
       agentActive={Boolean(agent?.active)}
       quickReplies={quickReplies}
       sttEnabled={Boolean(process.env.TRANSCRIBE_API_KEY)}
+      aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
     />
   );
 }

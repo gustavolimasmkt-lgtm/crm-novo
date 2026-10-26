@@ -211,6 +211,17 @@ export async function startFakeEvolution(
         })),
       );
     }
+    const chatM = path.match(/^\/chat\/(updateMessage|deleteMessageForEveryone)\/(.+)$/);
+    if (chatM && (req.method === "POST" || req.method === "DELETE")) {
+      const b = ((await body(req)) ?? {}) as Record<string, unknown>;
+      sent.push({
+        instance: chatM[2] ?? "",
+        kind: chatM[1] ?? "",
+        to: String(b.number ?? b.remoteJid ?? ""),
+        body: b,
+      });
+      return send(201, { status: "PENDING" });
+    }
     const sendM = path.match(/^\/message\/(sendText|sendMedia|sendWhatsAppAudio)\/(.+)$/);
     if (req.method === "POST" && sendM) {
       const b = ((await body(req)) ?? {}) as Record<string, unknown>;
