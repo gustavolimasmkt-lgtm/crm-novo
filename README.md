@@ -89,3 +89,8 @@ npx playwright test
 
 - Follow-up (tela do Agente, `followup_settings`): timer de 60 s; só age quando a última mensagem foi da IA. Contador em `conversations.followup_count`, zerado quando o cliente escreve.
 - Lembretes de visita (Agenda → Horários e IA): timer de 60 s; horas já tratadas ficam em `appointments.reminders_sent`.
+
+## Painel (Início)
+
+- `getDashboard` (packages/core/src/services/dashboard.ts): consultas SQL diretas, sem cache. Leads = negociações criadas no período; vendas = negociações ganhas com `closed_at` no período.
+- Gestor (`reports.view`) vê a empresa ou uma pessoa; vendedor vê só os próprios números.

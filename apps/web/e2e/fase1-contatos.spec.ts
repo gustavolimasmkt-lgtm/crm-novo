@@ -43,7 +43,7 @@ test("contatos: importa o export antigo, busca, edita, cria, exporta e exclui", 
   await page.getByRole("button", { name: "Aceitar e entrar" }).click();
   await page.waitForURL((u) => u.pathname === "/");
 
-  await page.getByRole("link", { name: "Contatos" }).first().click();
+  await page.getByRole("link", { name: "Contatos", exact: true }).first().click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Contatos");
   await expect(page.getByText("0 contatos")).toBeVisible();
 

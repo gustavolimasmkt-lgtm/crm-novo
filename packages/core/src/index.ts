@@ -11,6 +11,7 @@ export * from "./services/connections.js";
 export * from "./services/contacts.js";
 export * from "./services/conversations.js";
 export * from "./services/crm.js";
+export * from "./services/dashboard.js";
 export * from "./services/errors.js";
 export * from "./services/events.js";
 export * from "./services/messages.js";
