@@ -35,6 +35,7 @@ export type FakeEvolution = {
       pushName?: string;
       image?: boolean;
       audio?: boolean;
+      ad?: boolean;
       fromMe?: boolean;
     },
   ): Promise<string>;
@@ -106,7 +107,7 @@ export async function startFakeEvolution(
       return send(200, { ok: true, instance: latest });
     }
     if (req.method === "POST" && path === "/__test/incoming") {
-      const b = ((await body(req)) ?? {}) as { text?: string; from?: string; audio?: boolean };
+      const b = ((await body(req)) ?? {}) as { text?: string; from?: string; audio?: boolean; ad?: boolean };
       const latest = [...instances.entries()]
         .filter(([n, i]) => n.startsWith("crm_") && i.state === "open")
         .at(-1)?.[0];
@@ -115,6 +116,7 @@ export async function startFakeEvolution(
         from: b.from ?? "5511988887777",
         text: b.text ?? "Olá!",
         audio: b.audio === true,
+        ad: b.ad === true,
         pushName: "Cliente Teste",
       });
       return send(200, { ok: true, id });
@@ -277,11 +279,27 @@ export async function startFakeEvolution(
     failSends: false,
     async incoming(name, msg) {
       const id = msg.id ?? `IN${++seq}`;
-      const message = msg.audio
-        ? { audioMessage: { mimetype: "audio/ogg; codecs=opus", seconds: 4, ptt: true } }
-        : msg.image
-          ? { imageMessage: { mimetype: "image/jpeg", caption: msg.text ?? null } }
-          : { conversation: msg.text ?? "" };
+      const message = msg.ad
+        ? {
+            extendedTextMessage: {
+              text: msg.text ?? "Olá! Tenho interesse e queria mais informações.",
+              contextInfo: {
+                externalAdReply: {
+                  title: "HR-V prata 2020",
+                  sourceType: "ad",
+                  sourceId: "120001",
+                  sourceUrl: "https://fb.me/abc",
+                  ctwaClid: "CLID-E2E",
+                },
+                entryPointConversionApp: "instagram",
+              },
+            },
+          }
+        : msg.audio
+          ? { audioMessage: { mimetype: "audio/ogg; codecs=opus", seconds: 4, ptt: true } }
+          : msg.image
+            ? { imageMessage: { mimetype: "image/jpeg", caption: msg.text ?? null } }
+            : { conversation: msg.text ?? "" };
       await notify(name, "messages.upsert", {
         key: { id, remoteJid: `${msg.from}@s.whatsapp.net`, fromMe: msg.fromMe === true },
         pushName: msg.pushName ?? null,

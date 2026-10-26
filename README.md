@@ -106,3 +106,10 @@ npx playwright test
 - Responder (`quoted`), editar (`/chat/updateMessage`) e apagar para todos (`/chat/deleteMessageForEveryone`) pela Evolution; edição/apagado do cliente chegam como `protocolMessage`.
 - Mensagens agendadas (`scheduled_messages`) e campanhas (`campaigns`, `campaign_recipients`) saem pelo timer de 20 s; campanhas usam a mesma fila anti-bloqueio do follow-up. "SAIR" marca `contacts.opt_out`.
 - Resumo do lead: `summarizeConversation` (modelo Haiku), guardado em `conversations.ai_summary`.
+
+## Meta (anúncios e API de Conversões)
+
+- Variáveis: `APP_SECRET` (obrigatória para guardar tokens; texto aleatório de 32+ caracteres). Opcionais: `META_GRAPH_URL`, `META_GRAPH_VERSION` (padrão v26.0).
+- Lead de clique para WhatsApp: `parseAdReferral` (externalAdReply/conversionSource) grava `deals.ad_*` e `ctwa_clid`.
+- API de Conversões: `queueCapiEvents` lê `deal_events` (created, stage scheduled/won) depois de ligar; `processCapi` envia (timer de 60 s).
+- Tela Anúncios: `getAdsReport` junta CRM com Insights (`act_<id>/insights`, level=ad).

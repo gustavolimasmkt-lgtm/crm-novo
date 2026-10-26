@@ -487,6 +487,12 @@ export const deals = pgTable(
     description: text("description"),
     /** Campos trazidos de outro sistema (importação) ainda sem campo próprio aqui. */
     extra: jsonb("extra").$type<Record<string, string>>(),
+    /** Anúncio que trouxe o lead (clique para WhatsApp). */
+    adId: text("ad_id"),
+    adTitle: text("ad_title"),
+    adUrl: text("ad_url"),
+    adApp: text("ad_app"),
+    ctwaClid: text("ctwa_clid"),
     stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -776,7 +782,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 10 as const;
+export const schemaVersion = 11 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -865,4 +871,69 @@ export const campaignRecipients = pgTable(
     uniqueIndex("campaign_recipients_uq").on(t.campaignId, t.contactId),
     index("campaign_recipients_status_idx").on(t.campaignId, t.status),
   ],
+);
+
+/** Integração com a Meta: API de Conversões (pixel/dataset) e leitura dos anúncios (nomes e gasto). */
+export const metaSettings = pgTable("meta_settings", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  capiEnabled: boolean("capi_enabled").notNull().default(false),
+  /** Quando a API de Conversões foi ligada: só eventos depois disso são enviados. */
+  capiEnabledAt: timestamp("capi_enabled_at", { withTimezone: true }),
+  datasetId: text("dataset_id"),
+  /** Tokens guardados criptografados (APP_SECRET). */
+  capiTokenEnc: text("capi_token_enc"),
+  testEventCode: text("test_event_code"),
+  wabaId: text("waba_id"),
+  sendLead: boolean("send_lead").notNull().default(true),
+  sendSchedule: boolean("send_schedule").notNull().default(true),
+  sendPurchase: boolean("send_purchase").notNull().default(true),
+  adAccountId: text("ad_account_id"),
+  adsTokenEnc: text("ads_token_enc"),
+  updatedAt: updatedAt(),
+});
+
+/** Eventos para a API de Conversões (um por negociação e tipo). */
+export const capiEventStatusEnum = pgEnum("capi_event_status", ["pending", "sent", "failed"]);
+export const capiEvents = pgTable(
+  "capi_events",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    eventName: text("event_name").notNull(),
+    eventTime: timestamp("event_time", { withTimezone: true }).notNull(),
+    status: capiEventStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("capi_events_deal_event_uq").on(t.dealId, t.eventName),
+    index("capi_events_status_idx").on(t.status, t.createdAt),
+  ],
+);
+
+/** Nomes de anúncio, conjunto e campanha (lidos da Meta). */
+export const metaAds = pgTable(
+  "meta_ads",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    adId: text("ad_id").notNull(),
+    name: text("name"),
+    adsetName: text("adset_name"),
+    campaignId: text("campaign_id"),
+    campaignName: text("campaign_name"),
+    error: text("error"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.adId] })],
 );

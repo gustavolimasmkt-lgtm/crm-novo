@@ -1,6 +1,7 @@
 /**
  * Ao subir o servidor:
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
+ * - Meta: API de Conversões e nomes dos anúncios (a cada 60 s);
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
  * - lembra os clientes das visitas, avisa tarefas, envia mensagens agendadas e campanhas (a cada 20 s);
  * - follow-up: a IA retoma clientes que pararam de responder (a cada 20 s, respeitando o anti-bloqueio);
@@ -17,6 +18,21 @@ export async function register() {
   setInterval(() => {
     core.processPendingEvents(getDb()).catch((e) => console.error("[reprocessador]", e));
   }, 30_000).unref?.();
+
+  // Meta: envia eventos da API de Conversões e busca nomes de anúncios (a cada 60 s).
+  let metaRunning = false;
+  setInterval(async () => {
+    if (metaRunning) return;
+    metaRunning = true;
+    try {
+      await core.processCapi(getDb());
+      await core.syncAdNames(getDb());
+    } catch (e) {
+      console.error("[meta]", e);
+    } finally {
+      metaRunning = false;
+    }
+  }, 60_000).unref?.();
 
   const { EVOLUTION_API_URL: evoUrl, EVOLUTION_API_KEY: evoKey } = process.env;
   if (evoUrl && evoKey) {

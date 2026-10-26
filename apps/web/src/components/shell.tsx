@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BarChart3,
   Bot,
   Building2,
   CalendarDays,
@@ -14,6 +15,7 @@ import {
   Menu,
   MessageCircle,
   Package,
+  Plug,
   Settings2,
   Smartphone,
   UserRound,
@@ -63,6 +65,8 @@ export function Shell({
       : []),
     ...(canConfigure ? [{ href: "/agente", label: "Agente de IA", icon: <Bot size={20} /> }] : []),
     ...(canConfigure ? [{ href: "/campanhas", label: "Campanhas", icon: <Megaphone size={20} /> }] : []),
+    ...(canConfigure ? [{ href: "/anuncios", label: "Anúncios", icon: <BarChart3 size={20} /> }] : []),
+    ...(canConfigure ? [{ href: "/meta", label: "Integração Meta", icon: <Plug size={20} /> }] : []),
     { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
     ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
   ];

@@ -48,10 +48,10 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F42 | Conversão por palavra-chave | 2 | Pendente |  |
 | F43 | Movimentação por inatividade | 2 | Pendente |  |
 | F44 | Tarefas automáticas por estágio | 2 | Pendente |  |
-| F45 | Meta CAPI | 2 | Pendente |  |
+| F45 | Meta CAPI | 2 | Em validação | API de Conversões (tela Integração Meta, admin/gestor): Lead, Visita marcada (Schedule) e Venda (Purchase, com valor em BRL) a partir do histórico da negociação; telefone, nome e id do contato em SHA-256; action_source system_generated; com WABA e ctwa_clid usa o modo business_messaging (LeadSubmitted, QualifiedLead, Purchase). Fila com até 5 tentativas, código de teste, status dos últimos 30 dias. Tokens criptografados (APP_SECRET). Integração + E2E. |
 | F46 | Formulários Lead Ads | 2 | Pendente |  |
-| F47 | Anúncios: sincronização e painéis | 2 | Pendente |  |
-| F48 | Rastreamento: pixel, links, atribuição | 2 | Pendente |  |
+| F47 | Anúncios: sincronização e painéis | 2 | Parcial | Leitura da conta de anúncios (token ads_read): nomes de anúncio, conjunto e campanha e gasto por anúncio (Insights). Tela Anúncios por campanha e por anúncio: leads, gasto, custo por lead, visitas, vendas, receita, custo por venda e retorno; inclui campanha que gastou sem trazer lead. Sincronização de criativos e painéis de métricas da Meta: pendentes. Integração + E2E. |
+| F48 | Rastreamento: pixel, links, atribuição | 2 | Parcial | Atribuição de clique para WhatsApp: o anúncio de origem (id, título, link, Facebook/Instagram, ctwa_clid) vem na primeira mensagem e fica na negociação, com origem Meta Ads. Pixel de site e links rastreáveis: pendentes. Integração + E2E. |
 | F49 | Google Agenda | 2 | Pendente |  |
 | F50 | Relatórios por WhatsApp e PDF | 2 | Pendente |  |
 | F51 | Notificações push e sons | 2 | Pendente |  |

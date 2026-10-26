@@ -16,7 +16,18 @@ export type ParsedMessage = {
   sentAt: Date;
   /** Id (no WhatsApp) da mensagem que esta responde, se for resposta. */
   quotedExternalId: string | null;
+  /** Veio de anúncio de clique para WhatsApp (Facebook/Instagram). */
+  ad: AdReferral | null;
   raw: Record<string, unknown>;
+};
+
+export type AdReferral = {
+  id: string | null;
+  title: string | null;
+  url: string | null;
+  /** facebook | instagram, quando o WhatsApp informa. */
+  app: string | null;
+  ctwaClid: string | null;
 };
 
 export type SkipReason = "group" | "broadcast" | "protocol" | "reaction" | "invalid";
@@ -141,13 +152,19 @@ export function parseMessage(data: unknown): ParsedMessage | { skip: SkipReason 
 
   // Resposta a outra mensagem: o id citado vem no contextInfo do conteúdo.
   let quotedExternalId: string | null = null;
-  for (const v of Object.values(m)) {
-    const id = str(obj(obj(v)?.contextInfo)?.stanzaId);
+  const contexts = [
+    ...Object.values(m).map((v) => obj(obj(v)?.contextInfo)),
+    obj(d.contextInfo),
+    obj(m.messageContextInfo),
+  ].filter((x): x is Obj => !!x);
+  for (const ctx of contexts) {
+    const id = str(ctx.stanzaId);
     if (id) {
       quotedExternalId = id;
       break;
     }
   }
+  const ad = parseAdReferral(contexts);
 
   const ts = d.messageTimestamp;
   const seconds =
@@ -166,6 +183,7 @@ export function parseMessage(data: unknown): ParsedMessage | { skip: SkipReason 
     mediaName,
     sentAt,
     quotedExternalId,
+    ad,
     raw: { key, message: d.message, messageTimestamp: d.messageTimestamp },
   };
 }
@@ -201,5 +219,35 @@ export function parseStatus(v: unknown): "sent" | "delivered" | "read" | "failed
   if (s === "DELIVERY_ACK" || s === "3") return "delivered";
   if (s === "READ" || s === "PLAYED" || s === "4" || s === "5") return "read";
   if (s === "ERROR" || s === "0") return "failed";
+  return null;
+}
+
+/**
+ * Anúncio de clique para WhatsApp: o WhatsApp manda "externalAdReply" (id do anúncio, título, link e,
+ * às vezes, o ctwa_clid) e/ou "conversionSource"/"entryPointConversionApp" no contextInfo.
+ */
+function parseAdReferral(contexts: Obj[]): AdReferral | null {
+  for (const ctx of contexts) {
+    const ext = obj(ctx.externalAdReply);
+    const source = str(ctx.conversionSource) ?? str(ctx.entryPointConversionSource);
+    const fromAd =
+      (ext && (str(ext.sourceType)?.toLowerCase() === "ad" || str(ext.sourceId) || str(ext.ctwaClid))) ||
+      (source && /ads?|ctwa/i.test(source));
+    if (!fromAd) continue;
+    const app = (str(ctx.entryPointConversionApp) ?? str(ext?.sourceApp) ?? "").toLowerCase();
+    const url = str(ext?.sourceUrl);
+    return {
+      id: str(ext?.sourceId),
+      title: str(ext?.title) ?? str(ext?.body),
+      url,
+      app:
+        app.includes("insta") || url?.includes("instagram")
+          ? "instagram"
+          : app.includes("face") || url?.includes("fb.me") || url?.includes("facebook")
+            ? "facebook"
+            : app || null,
+      ctwaClid: str(ext?.ctwaClid) ?? str(ctx.ctwaClid),
+    };
+  }
   return null;
 }

@@ -7,3 +7,7 @@ console.log(`Evolution falsa em ${fake.url}`);
 const { startFakeAnthropic } = await import("./fake-anthropic.js");
 const ai = await startFakeAnthropic({ port: Number(process.env.FAKE_ANTHROPIC_PORT ?? 3198) });
 console.log(`Anthropic falsa em ${ai.url}`);
+
+const { startFakeMeta } = await import("./fake-meta.js");
+const meta = await startFakeMeta({ port: Number(process.env.FAKE_META_PORT ?? 3197) });
+console.log(`Meta falsa em ${meta.url}`);

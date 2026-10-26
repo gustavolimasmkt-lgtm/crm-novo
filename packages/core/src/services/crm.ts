@@ -36,6 +36,7 @@ import { parseCsv } from "../csv.js";
 import { parseBrDate, parseMoneyToCents } from "../money.js";
 import { slugify } from "../text.js";
 import { normalizePhoneInput, phoneVariants } from "../whatsapp/evolution.js";
+import type { AdReferral } from "../whatsapp/parse.js";
 import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
 
@@ -319,21 +320,36 @@ export async function autoCreateDeal(
   organizationId: string,
   contactId: string,
   connectionId: string,
+  ad: AdReferral | null = null,
 ) {
+  const adFields = ad
+    ? { adId: ad.id, adTitle: ad.title, adUrl: ad.url, adApp: ad.app, ctwaClid: ad.ctwaClid }
+    : {};
   const open = await db
     .select({ id: deals.id })
     .from(deals)
     .innerJoin(pipelineStages, eq(pipelineStages.id, deals.stageId))
     .where(and(eq(deals.contactId, contactId), notInArray(pipelineStages.kind, CLOSED_KINDS)))
     .limit(1);
-  if (open.length) return null;
+  if (open.length) {
+    // Cliente já em negociação clicou num anúncio: guarda o anúncio se ainda não tinha.
+    if (ad)
+      await db
+        .update(deals)
+        .set(adFields)
+        .where(and(eq(deals.id, open[0]?.id ?? ""), isNull(deals.adId), isNull(deals.ctwaClid)));
+    return null;
+  }
   const any = await db.query.deals.findFirst({ where: eq(deals.contactId, contactId) });
   if (any) return null; // já negociou antes (ganho/perdido): não cria sozinho
   return db.transaction(async (tx) => {
     const stage = await firstStage(tx, organizationId);
     const contact = await tx.query.contacts.findFirst({ where: eq(contacts.id, contactId) });
     const src = await tx.query.dealSources.findFirst({
-      where: and(eq(dealSources.organizationId, organizationId), eq(dealSources.key, "whatsapp_direto")),
+      where: and(
+        eq(dealSources.organizationId, organizationId),
+        eq(dealSources.key, ad ? "meta_ads" : "whatsapp_direto"),
+      ),
     });
     const number = await nextNumber(tx, organizationId);
     const [d] = await tx
@@ -347,9 +363,15 @@ export async function autoCreateDeal(
         title: contact?.name || contact?.pushName || contact?.phone || "Novo lead",
         sourceId: src?.id ?? null,
         connectionId,
+        ...adFields,
       })
       .returning({ id: deals.id });
-    if (d) await event(tx, organizationId, d.id, null, "created", { stage: stage.name, auto: true });
+    if (d)
+      await event(tx, organizationId, d.id, null, "created", {
+        stage: stage.name,
+        auto: true,
+        ...(ad ? { ad: ad.title ?? ad.id ?? "anúncio" } : {}),
+      });
     return d?.id ?? null;
   });
 }

@@ -390,6 +390,10 @@ type DealDetail = {
     actorName: string | null;
   }[];
   conversationId: string | null;
+  adId: string | null;
+  adTitle: string | null;
+  adUrl: string | null;
+  adApp: string | null;
   aiSummary: {
     resumo: string;
     interesse: string | null;
@@ -551,6 +555,30 @@ function DealPanel({
                 ›
               </span>
             </Link>
+            {(d.adId || d.adTitle) && (
+              <div
+                className="rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[14px]"
+                data-testid="anuncio-negociacao"
+              >
+                <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">
+                  Veio de anúncio
+                  {d.adApp
+                    ? ` · ${d.adApp === "instagram" ? "Instagram" : d.adApp === "facebook" ? "Facebook" : d.adApp}`
+                    : ""}
+                </p>
+                <p className="font-medium">{d.adTitle ?? `Anúncio ${d.adId}`}</p>
+                {d.adUrl && (
+                  <a
+                    href={d.adUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[13px] text-accent underline"
+                  >
+                    Ver anúncio
+                  </a>
+                )}
+              </div>
+            )}
             {d.aiSummary && (
               <div
                 className="space-y-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-[14px]"

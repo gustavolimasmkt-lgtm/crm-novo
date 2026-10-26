@@ -200,7 +200,7 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     await optOutContact(db, c, conversation.id, contact.id);
   // Quem escreve é alguém da equipe (ex.: respondendo um aviso): não vira lead nem recebe IA.
   if (!p.fromMe && !(await isTeamPhone(db, c.organizationId, contact.phone))) {
-    const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id);
+    const newDealId = await autoCreateDeal(db, c.organizationId, contact.id, c.id, p.ad);
     if (newDealId)
       await distributeLead(db, c.organizationId, newDealId, conversation.id, c.id, {
         name: contact.name ?? contact.pushName ?? null,
