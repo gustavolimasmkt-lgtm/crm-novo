@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bot,
   Building2,
+  CalendarClock,
   CalendarDays,
   ChevronsUpDown,
   Crown,
@@ -20,6 +21,7 @@ import {
   Smartphone,
   UserRound,
   Users,
+  Workflow,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
@@ -56,6 +58,7 @@ export function Shell({
     { href: "/crm", label: "CRM", icon: <KanbanSquare size={20} />, primary: true },
     { href: "/contatos", label: "Contatos", icon: <UserRound size={20} />, primary: true },
     { href: "/tarefas", label: "Tarefas", icon: <ListTodo size={20} /> },
+    { href: "/agendadas", label: "Agendadas", icon: <CalendarClock size={20} /> },
     { href: "/agenda", label: "Agenda", icon: <CalendarDays size={20} /> },
     { href: "/catalogo", label: "Catálogo", icon: <Package size={20} /> },
     { href: "/respostas", label: "Respostas rápidas", icon: <Zap size={20} /> },
@@ -64,6 +67,7 @@ export function Shell({
       ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
       : []),
     ...(canConfigure ? [{ href: "/agente", label: "Agente de IA", icon: <Bot size={20} /> }] : []),
+    ...(canConfigure ? [{ href: "/fluxos", label: "Fluxos", icon: <Workflow size={20} /> }] : []),
     ...(canConfigure ? [{ href: "/campanhas", label: "Campanhas", icon: <Megaphone size={20} /> }] : []),
     ...(canConfigure ? [{ href: "/anuncios", label: "Anúncios", icon: <BarChart3 size={20} /> }] : []),
     ...(canConfigure ? [{ href: "/meta", label: "Integração Meta", icon: <Plug size={20} /> }] : []),

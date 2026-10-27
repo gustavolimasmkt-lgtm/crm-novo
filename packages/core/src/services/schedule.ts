@@ -248,7 +248,7 @@ async function moveDealToScheduled(
     dealId: d.id,
     actorId,
     type: "stage",
-    data: { from: from?.name ?? null, to: target.name, kind: target.kind, via },
+    data: { from: from?.name ?? null, to: target.name, toId: target.id, kind: target.kind, via },
   });
 }
 

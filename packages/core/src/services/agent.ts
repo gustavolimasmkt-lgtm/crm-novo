@@ -758,7 +758,7 @@ export async function runAiReply(db: Database, deps: AiDeps, conversationId: str
         organizationId,
         dealId: deal.id,
         type: "stage",
-        data: { from: from?.name ?? null, to: to.name, kind: to.kind, via: "IA" },
+        data: { from: from?.name ?? null, to: to.name, toId: to.id, kind: to.kind, via: "IA" },
       });
     }
   }

@@ -621,6 +621,7 @@ export async function moveDeal(
   await event(db, organizationId, d.id, actor.userId, "stage", {
     from: from?.name ?? null,
     to: to.name,
+    toId: to.id,
     kind: to.kind,
   });
   await notifyOrg(db, { o: organizationId, t: "conversation" });
@@ -672,13 +673,15 @@ export async function setDealTags(
   const d = await loadDeal(db, actor, organizationId, id);
   const clean = [...new Set(names.map((n) => n.trim().slice(0, 40)).filter(Boolean))];
   const ids = await tagIdsByName(db, organizationId, clean, can(actor, "settings.manage"));
+  const before = await db.select({ id: dealTags.tagId }).from(dealTags).where(eq(dealTags.dealId, d.id));
+  const added = ids.filter((t) => !before.some((b) => b.id === t));
   await db.delete(dealTags).where(eq(dealTags.dealId, d.id));
   if (ids.length)
     await db
       .insert(dealTags)
       .values(ids.map((tagId) => ({ dealId: d.id, tagId })))
       .onConflictDoNothing();
-  await event(db, organizationId, d.id, actor.userId, "tags", { tags: clean });
+  await event(db, organizationId, d.id, actor.userId, "tags", { tags: clean, added });
   await notifyOrg(db, { o: organizationId, t: "conversation" });
 }
 

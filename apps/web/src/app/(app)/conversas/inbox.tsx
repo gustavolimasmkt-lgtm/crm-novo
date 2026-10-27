@@ -16,6 +16,7 @@ import {
   SendHorizontal,
   StickyNote,
   User,
+  Workflow,
   X,
   Zap,
 } from "lucide-react";
@@ -88,7 +89,12 @@ type LeadSummary = {
 type QuickReply = { id: string; shortcut: string; body: string };
 
 /** Recursos extras da caixa de entrada (respostas rápidas, transcrição). */
-const Extras = createContext<{ quickReplies: QuickReply[]; sttEnabled: boolean; aiEnabled: boolean }>({
+const Extras = createContext<{
+  quickReplies: QuickReply[];
+  sttEnabled: boolean;
+  aiEnabled: boolean;
+  flows?: { id: string; name: string }[];
+}>({
   quickReplies: [],
   sttEnabled: false,
   aiEnabled: false,
@@ -125,7 +131,21 @@ function fillReply(body: string, contactName: string) {
 }
 type Connection = { id: string; name: string; phone: string | null; status: string };
 type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
-type ThreadData = { conversation: Conv; messages: Msg[]; deal: DealChip | null; scheduled: Scheduled[] };
+type FlowRun = {
+  id: string;
+  flowName: string;
+  stepIndex: number;
+  totalSteps: number;
+  nextAt: string;
+  next: string;
+};
+type ThreadData = {
+  conversation: Conv;
+  messages: Msg[];
+  deal: DealChip | null;
+  scheduled: Scheduled[];
+  runs: FlowRun[];
+};
 type Person = { id: string; name: string };
 
 const FILTERS: { id: Filter; label: string }[] = [
@@ -155,6 +175,7 @@ export function Inbox({
   quickReplies = [],
   sttEnabled = false,
   aiEnabled = false,
+  flows = [],
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -167,10 +188,11 @@ export function Inbox({
   quickReplies?: QuickReply[];
   sttEnabled?: boolean;
   aiEnabled?: boolean;
+  flows?: { id: string; name: string }[];
 }) {
   const extras = useMemo(
-    () => ({ quickReplies, sttEnabled, aiEnabled }),
-    [quickReplies, sttEnabled, aiEnabled],
+    () => ({ quickReplies, sttEnabled, aiEnabled, flows }),
+    [quickReplies, sttEnabled, aiEnabled, flows],
   );
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
@@ -645,6 +667,7 @@ function Thread({
             setEditing(null);
           }}
           scheduled={thread?.scheduled ?? []}
+          runs={thread?.runs ?? []}
         />
       )}
     </>
@@ -1054,6 +1077,7 @@ function Composer({
   editing,
   onCancel,
   scheduled,
+  runs,
 }: {
   id: string;
   contactName: string;
@@ -1062,8 +1086,24 @@ function Composer({
   editing: Msg | null;
   onCancel: () => void;
   scheduled: Scheduled[];
+  runs: FlowRun[];
 }) {
-  const { quickReplies } = useContext(Extras);
+  const { quickReplies, flows = [] } = useContext(Extras);
+  const [flowMenu, setFlowMenu] = useState(false);
+  async function startFlow(flowId: string) {
+    setFlowMenu(false);
+    setError(null);
+    try {
+      await api(`/api/fluxos/${flowId}/iniciar`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: id }),
+      });
+      onSent();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   const [text, setText] = useState("");
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
   // Entrou em modo edição: traz o texto da mensagem.
@@ -1198,6 +1238,51 @@ function Composer({
           ))}
         </ul>
       )}
+      {runs.length > 0 && !editing && (
+        <ul className="mb-2 space-y-1" data-testid="fluxos-ativos">
+          {runs.map((r) => (
+            <li
+              key={r.id}
+              className="flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-1.5 text-[13px] text-accent"
+            >
+              <Workflow size={14} className="shrink-0" />
+              <span className="shrink-0 font-semibold">{r.flowName}</span>
+              <span className="min-w-0 flex-1 truncate">
+                passo {r.stepIndex + 1} de {r.totalSteps} · {r.next} · {whenFmt.format(new Date(r.nextAt))}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 font-semibold text-danger"
+                onClick={async () => {
+                  await api(`/api/fluxos/execucoes/${r.id}/parar`, { method: "POST" }).catch(() => {});
+                  onSent();
+                }}
+              >
+                Parar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {flowMenu && flows.length > 0 && (
+        <ul
+          aria-label="Fluxos disponíveis"
+          className="absolute right-3 bottom-full left-3 mb-2 max-h-72 overflow-y-auto rounded-2xl bg-surface p-1 shadow-lg ring-1 ring-separator md:right-auto md:left-5 md:w-80"
+        >
+          <li className="px-3 py-1.5 text-[12px] font-medium text-ink-3">Iniciar fluxo para este cliente</li>
+          {flows.map((f) => (
+            <li key={f.id}>
+              <button
+                type="button"
+                onClick={() => startFlow(f.id)}
+                className="block w-full rounded-xl px-3 py-2 text-left text-[14px] hover:bg-fill"
+              >
+                {f.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {(replyTo || editing) && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border-l-4 border-accent bg-fill px-3 py-1.5 text-[13px]">
           <span className="min-w-0 flex-1 truncate">
@@ -1304,6 +1389,20 @@ function Composer({
             )}
           >
             <StickyNote size={20} />
+          </button>
+        )}
+        {!note && !editing && flows.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setFlowMenu((v) => !v)}
+            aria-label="Iniciar fluxo"
+            title="Iniciar fluxo"
+            className={cx(
+              "mb-1 rounded-full p-2 hover:bg-fill",
+              flowMenu ? "bg-accent-soft text-accent" : "text-ink-2",
+            )}
+          >
+            <Workflow size={20} />
           </button>
         )}
         {!note && !editing && quickReplies.length > 0 && (

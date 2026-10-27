@@ -787,7 +787,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 12 as const;
+export const schemaVersion = 13 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -941,4 +941,69 @@ export const metaAds = pgTable(
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.adId] })],
+);
+
+/** Fluxo de mensagens: passos em sequência disparados por um gatilho. */
+export type FlowStep =
+  | { type: "message"; text: string }
+  | { type: "wait"; minutes: number }
+  | { type: "move_stage"; stageId: string }
+  | { type: "task"; title: string; dueMinutes: number }
+  | { type: "notify"; text: string };
+export const flowTriggerEnum = pgEnum("flow_trigger", [
+  "manual",
+  "lead_created",
+  "stage_entered",
+  "tag_added",
+]);
+export const flows = pgTable("flows", {
+  id: id(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(false),
+  /** Quando foi ligado: gatilhos de antes disso não disparam. */
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  trigger: flowTriggerEnum("trigger").notNull().default("manual"),
+  triggerStageId: uuid("trigger_stage_id").references(() => pipelineStages.id, { onDelete: "set null" }),
+  triggerTagId: uuid("trigger_tag_id").references(() => tags.id, { onDelete: "set null" }),
+  stopOnReply: boolean("stop_on_reply").notNull().default(true),
+  steps: jsonb("steps").$type<FlowStep[]>().notNull(),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const flowRunStatusEnum = pgEnum("flow_run_status", ["active", "done", "stopped", "failed"]);
+export const flowRuns = pgTable(
+  "flow_runs",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => flows.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
+    /** De onde veio (evento da negociação ou início manual): evita disparar duas vezes. */
+    triggerKey: text("trigger_key").notNull(),
+    status: flowRunStatusEnum("status").notNull().default("active"),
+    stepIndex: integer("step_index").notNull().default(0),
+    nextAt: timestamp("next_at", { withTimezone: true }).notNull().defaultNow(),
+    stopReason: text("stop_reason"),
+    lastError: text("last_error"),
+    startedByUserId: uuid("started_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("flow_runs_trigger_uq").on(t.flowId, t.triggerKey),
+    uniqueIndex("flow_runs_active_uq").on(t.flowId, t.contactId).where(sql`status = 'active'`),
+    index("flow_runs_due_idx").on(t.status, t.nextAt),
+  ],
 );

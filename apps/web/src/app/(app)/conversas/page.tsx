@@ -3,6 +3,7 @@ import {
   getAgent,
   listAssignableUsers,
   listConversations,
+  listFlows,
   listQuickReplies,
   listUsableConnections,
 } from "@crm/core";
@@ -16,12 +17,13 @@ export const dynamic = "force-dynamic";
 export default async function ConversationsPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
   const ctx = await requireOrg();
   const db = getDb();
-  const [initial, connections, people, agent, quickReplies] = await Promise.all([
+  const [initial, connections, people, agent, quickReplies, flowList] = await Promise.all([
     listConversations(db, ctx.actor, ctx.organization.id, { filter: "open" }),
     listUsableConnections(db, ctx.organization.id),
     listAssignableUsers(db, ctx.organization.id),
     getAgent(db, ctx.organization.id),
     listQuickReplies(db, ctx.organization.id),
+    listFlows(db, ctx.organization.id),
   ]);
   const { c } = await searchParams;
   return (
@@ -37,6 +39,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
       quickReplies={quickReplies}
       sttEnabled={Boolean(process.env.TRANSCRIBE_API_KEY)}
       aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+      flows={flowList.filter((f) => f.active).map((f) => ({ id: f.id, name: f.name }))}
     />
   );
 }

@@ -85,6 +85,13 @@
       "when": 1793055607700,
       "tag": "0011_avisos_mensagens",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793130381980,
+      "tag": "0012_fluxos",
+      "breakpoints": true
     }
   ]
 }

@@ -113,3 +113,9 @@ npx playwright test
 - Lead de clique para WhatsApp: `parseAdReferral` (externalAdReply/conversionSource) grava `deals.ad_*` e `ctwa_clid`.
 - API de Conversões: `queueCapiEvents` lê `deal_events` (created, stage scheduled/won) depois de ligar; `processCapi` envia (timer de 60 s).
 - Tela Anúncios: `getAdsReport` junta CRM com Insights (`act_<id>/insights`, level=ad).
+
+## Fluxos
+
+- `flows` (gatilho + passos em jsonb) e `flow_runs` (um por cliente/fluxo ativo; `trigger_key` evita disparo duplo).
+- Gatilhos lidos de `deal_events` (created, stage com `toId`, tags com `added`) depois que o fluxo é ligado.
+- `processFlows` roda no timer de 20 s; mensagens usam `reserveAutomatedSend` (anti-bloqueio) e a janela do follow-up.

@@ -388,7 +388,7 @@ export async function processReminders(db: Database, evo: EvolutionApi, limit = 
 }
 
 /** Conversa do contato para mandar o lembrete (usa a conexão da visita ou qualquer conexão aberta). */
-async function conversationFor(
+export async function conversationFor(
   db: Database,
   organizationId: string,
   contact: { id: string; waJid: string; phone: string | null },
