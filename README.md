@@ -119,3 +119,5 @@ npx playwright test
 - `flows` (gatilho + passos em jsonb) e `flow_runs` (um por cliente/fluxo ativo; `trigger_key` evita disparo duplo).
 - Gatilhos lidos de `deal_events` (created, stage com `toId`, tags com `added`) depois que o fluxo é ligado.
 - `processFlows` roda no timer de 20 s; mensagens usam `reserveAutomatedSend` (anti-bloqueio) e a janela do follow-up.
+- Mídia dos passos em `flow_media` (bytea, até 16 MB): `POST /api/fluxos/midia` e `GET /api/fluxos/midia/[id]`.
+- Execução manual (`trigger_key` `manual:`): `/api/fluxos/[id]/iniciar` chama `processFlows({ runId })` na hora; envia até 10 passos seguidos com 1,2 s entre eles, `automation = 'flow_manual'` (fora do limite diário).

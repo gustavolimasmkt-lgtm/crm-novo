@@ -787,7 +787,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 13 as const;
+export const schemaVersion = 14 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -949,7 +949,14 @@ export type FlowStep =
   | { type: "wait"; minutes: number }
   | { type: "move_stage"; stageId: string }
   | { type: "task"; title: string; dueMinutes: number }
-  | { type: "notify"; text: string };
+  | { type: "notify"; text: string }
+  | {
+      type: "media";
+      mediaId: string;
+      kind: "image" | "video" | "audio" | "document";
+      fileName: string;
+      caption: string;
+    };
 export const flowTriggerEnum = pgEnum("flow_trigger", [
   "manual",
   "lead_created",
@@ -1006,4 +1013,22 @@ export const flowRuns = pgTable(
     uniqueIndex("flow_runs_active_uq").on(t.flowId, t.contactId).where(sql`status = 'active'`),
     index("flow_runs_due_idx").on(t.status, t.nextAt),
   ],
+);
+
+/** Arquivos usados nos fluxos (foto, vídeo, áudio, documento do carro). */
+export const flowMedia = pgTable(
+  "flow_media",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    mime: text("mime").notNull(),
+    fileName: text("file_name").notNull(),
+    size: integer("size").notNull(),
+    data: bytea("data").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("flow_media_org_idx").on(t.organizationId)],
 );

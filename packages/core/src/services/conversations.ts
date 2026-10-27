@@ -668,6 +668,8 @@ export async function sendAiMessage(
   text: string,
   opts: {
     image?: { name: string; mime: string; data: Buffer };
+    /** Qualquer mídia (foto, vídeo, áudio de voz, documento). */
+    media?: { name: string; mime: string; data: Buffer };
     /** Envio automático (follow-up, lembrete): conta no limite anti-bloqueio. */
     automation?: string;
     /** Mostra "digitando..." antes, proporcional ao tamanho do texto. */
@@ -676,7 +678,7 @@ export async function sendAiMessage(
     byUserId?: string;
   } = {},
 ) {
-  const { image } = opts;
+  const image = opts.media ?? opts.image;
   const conv = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.organizationId, organizationId)),
   });
@@ -687,7 +689,7 @@ export async function sendAiMessage(
   const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, conv.contactId) });
   if (!connection || !contact || !connection.active || connection.status !== "open")
     throw new AppError("validation", "Conexão indisponível para a IA responder.");
-  const type = image ? ("image" as const) : ("text" as const);
+  const type: MessageType = image ? kindOf(image.mime) : "text";
   const [msg] = await db
     .insert(messages)
     .values({

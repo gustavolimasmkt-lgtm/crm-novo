@@ -5,6 +5,7 @@ import {
   dealEvents,
   deals,
   type FlowStep,
+  flowMedia,
   flowRuns,
   flows,
   messages,
@@ -56,6 +57,13 @@ const stepSchema = z.discriminatedUnion("type", [
     type: z.literal("notify"),
     text: z.string().trim().min(1, "Escreva o aviso.").max(1000),
   }),
+  z.object({
+    type: z.literal("media"),
+    mediaId: z.string().uuid("Envie o arquivo do passo."),
+    kind: z.enum(["image", "video", "audio", "document"]),
+    fileName: z.string().max(200).default("arquivo"),
+    caption: z.string().max(1000).default(""),
+  }),
 ]);
 
 export const flowInput = z.object({
@@ -72,7 +80,7 @@ async function validateRefs(db: Database, organizationId: string, input: z.infer
     throw new AppError("validation", "Escolha a etapa que dispara o fluxo.");
   if (input.trigger === "tag_added" && !input.triggerTagId)
     throw new AppError("validation", "Escolha a etiqueta que dispara o fluxo.");
-  if (!input.steps.some((s) => s.type === "message" || s.type === "notify" || s.type === "task"))
+  if (!input.steps.some((s) => ["message", "media", "notify", "task"].includes(s.type)))
     throw new AppError("validation", "O fluxo precisa de pelo menos uma mensagem, aviso ou tarefa.");
   const stageIds = [
     ...input.steps.flatMap((s) => (s.type === "move_stage" ? [s.stageId] : [])),
@@ -84,6 +92,15 @@ async function validateRefs(db: Database, organizationId: string, input: z.infer
       .from(pipelineStages)
       .where(and(eq(pipelineStages.organizationId, organizationId), inArray(pipelineStages.id, stageIds)));
     if (found.length !== new Set(stageIds).size) throw new AppError("validation", "Etapa inválida.");
+  }
+  const mediaIds = input.steps.flatMap((s) => (s.type === "media" ? [s.mediaId] : []));
+  if (mediaIds.length) {
+    const found = await db
+      .select({ id: flowMedia.id })
+      .from(flowMedia)
+      .where(and(eq(flowMedia.organizationId, organizationId), inArray(flowMedia.id, mediaIds)));
+    if (found.length !== new Set(mediaIds).size)
+      throw new AppError("validation", "Arquivo do passo não encontrado. Envie de novo.");
   }
   if (input.trigger === "tag_added" && input.triggerTagId) {
     const t = await db.query.tags.findFirst({
@@ -226,6 +243,11 @@ export async function startFlow(
     .onConflictDoNothing()
     .returning({ id: flowRuns.id });
   if (!r) throw new AppError("validation", "Esse fluxo já está rodando para este cliente.");
+  // Alguém da equipe mandou o fluxo: a IA sai desta conversa, como quando a equipe responde.
+  await db
+    .update(conversations)
+    .set({ aiPaused: true, aiPausedReason: "Fluxo enviado pela equipe" })
+    .where(and(eq(conversations.id, conv.id), eq(conversations.aiPaused, false)));
   await notifyOrg(db, { o: organizationId, t: "message", c: conv.id });
   return r.id;
 }
@@ -288,6 +310,8 @@ export function describeStep(s: FlowStep | undefined) {
       return `tarefa: ${s.title}`;
     case "notify":
       return "avisar responsável";
+    case "media":
+      return { image: "foto", video: "vídeo", audio: "áudio", document: "documento" }[s.kind];
   }
 }
 
@@ -381,13 +405,24 @@ async function assigneeOf(db: Database, run: Run, flow: Flow) {
 }
 
 /** Executa os passos que venceram. Chamado por um timer (mensagens passam pela fila anti-bloqueio). */
-export async function processFlows(db: Database, evo: EvolutionApi, limit = 30) {
-  await queueFlowTriggers(db);
+export async function processFlows(
+  db: Database,
+  evo: EvolutionApi,
+  opts: { runId?: string; limit?: number } = {},
+) {
+  if (!opts.runId) await queueFlowTriggers(db);
+  const limit = opts.limit ?? 30;
   const due = await db
     .select({ run: flowRuns, flow: flows })
     .from(flowRuns)
     .innerJoin(flows, eq(flows.id, flowRuns.flowId))
-    .where(and(eq(flowRuns.status, "active"), lte(flowRuns.nextAt, new Date())))
+    .where(
+      and(
+        eq(flowRuns.status, "active"),
+        lte(flowRuns.nextAt, new Date()),
+        opts.runId ? eq(flowRuns.id, opts.runId) : undefined,
+      ),
+    )
     .orderBy(asc(flowRuns.nextAt))
     .limit(limit);
   const out: { runId: string; result: string }[] = [];
@@ -403,7 +438,9 @@ export async function processFlows(db: Database, evo: EvolutionApi, limit = 30) 
     let step = run.stepIndex;
     let nextAt = new Date();
     let finished: { status: "done" | "stopped" | "failed"; reason: string | null } | null = null;
-    let sent = false;
+    let sent = 0;
+    // Enviado por alguém na conversa: sai na hora, em sequência (é atendimento, não disparo).
+    const manual = run.triggerKey.startsWith("manual:");
     try {
       for (let guard = 0; guard < 10; guard++) {
         const reason = await stopReasonFor(db, run, flow);
@@ -421,13 +458,10 @@ export async function processFlows(db: Database, evo: EvolutionApi, limit = 30) 
           step++;
           break;
         }
-        if (s.type === "message") {
-          if (sent) break; // uma mensagem por ciclo: a próxima espera a vez na fila
-          const pace = await getFollowupSettings(db, run.organizationId);
-          if (!inWindow(pace)) {
-            nextAt = new Date(Date.now() + 15 * 60_000);
-            break;
-          }
+        if (s.type === "message" || s.type === "media") {
+          // Automático: uma mensagem por ciclo pela fila anti-bloqueio. Manual: até 10 em sequência.
+          if (sent && !manual) break;
+          if (sent >= 10) break;
           const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, run.contactId) });
           const deal = run.dealId
             ? await db.query.deals.findFirst({ where: eq(deals.id, run.dealId) })
@@ -435,13 +469,42 @@ export async function processFlows(db: Database, evo: EvolutionApi, limit = 30) 
           if (!contact) throw new Error("contato não encontrado");
           const convId = await conversationFor(db, run.organizationId, contact, deal?.connectionId ?? null);
           const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, convId) });
-          if (!conv || !(await reserveAutomatedSend(db, conv.connectionId, pace))) break; // tenta no próximo ciclo
-          await sendAiMessage(db, evo, run.organizationId, convId, fillText(s.text, contact), {
-            automation: "flow",
-            typing: true,
-            byUserId: run.startedByUserId ?? flow.createdByUserId ?? undefined,
-          });
-          sent = true;
+          if (!conv) throw new Error("conversa não encontrada");
+          if (!manual) {
+            const pace = await getFollowupSettings(db, run.organizationId);
+            if (!inWindow(pace)) {
+              nextAt = new Date(Date.now() + 15 * 60_000);
+              break;
+            }
+            if (!(await reserveAutomatedSend(db, conv.connectionId, pace))) break; // tenta no próximo ciclo
+          } else if (sent) await new Promise((r) => setTimeout(r, 1200));
+          const by = run.startedByUserId ?? flow.createdByUserId ?? undefined;
+          const automation = manual ? "flow_manual" : "flow";
+          if (s.type === "message") {
+            await sendAiMessage(db, evo, run.organizationId, convId, fillText(s.text, contact), {
+              automation,
+              typing: true,
+              byUserId: by,
+            });
+          } else {
+            const file = await db.query.flowMedia.findFirst({
+              where: and(eq(flowMedia.id, s.mediaId), eq(flowMedia.organizationId, run.organizationId)),
+            });
+            if (!file) throw new Error("arquivo do passo foi apagado");
+            await sendAiMessage(
+              db,
+              evo,
+              run.organizationId,
+              convId,
+              s.kind === "audio" ? "" : fillText(s.caption, contact),
+              {
+                automation,
+                byUserId: by,
+                media: { name: file.fileName, mime: file.mime, data: Buffer.from(file.data) },
+              },
+            );
+          }
+          sent++;
           step++;
           continue;
         }
@@ -617,4 +680,55 @@ export async function listUpcoming(
       }),
   ];
   return items.sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+// ---------------------------------------------------------------- arquivos dos fluxos
+
+export const MAX_FLOW_MEDIA_BYTES = 16 * 1024 * 1024;
+
+export function mediaKind(mime: string): "image" | "video" | "audio" | "document" {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "document";
+}
+
+export async function uploadFlowMedia(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  file: { name: string; mime: string; data: Buffer },
+) {
+  requireManage(actor);
+  if (!file.data.length) throw new AppError("validation", "Arquivo vazio.");
+  if (file.data.length > MAX_FLOW_MEDIA_BYTES)
+    throw new AppError(
+      "validation",
+      "Arquivo grande demais (máximo 16 MB). Para vídeo, mande uma versão menor.",
+    );
+  const mime = (file.mime || "application/octet-stream").split(";")[0]?.trim() || "application/octet-stream";
+  if (!/^(image|video|audio)\/|^application\/pdf$/.test(mime))
+    throw new AppError("validation", "Use foto, vídeo, áudio ou PDF.");
+  const name = file.name.slice(0, 200) || "arquivo";
+  const [m] = await db
+    .insert(flowMedia)
+    .values({
+      organizationId,
+      mime,
+      fileName: name,
+      size: file.data.length,
+      data: file.data,
+      createdByUserId: actor.userId,
+    })
+    .returning({ id: flowMedia.id });
+  return { id: m?.id ?? "", kind: mediaKind(mime), fileName: name, size: file.data.length };
+}
+
+export async function getFlowMedia(db: Database, organizationId: string, id: string) {
+  if (!uuid.test(id)) throw new AppError("not_found", "Arquivo não encontrado.");
+  const m = await db.query.flowMedia.findFirst({
+    where: and(eq(flowMedia.id, id), eq(flowMedia.organizationId, organizationId)),
+  });
+  if (!m) throw new AppError("not_found", "Arquivo não encontrado.");
+  return m;
 }

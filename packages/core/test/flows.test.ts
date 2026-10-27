@@ -30,6 +30,7 @@ import {
   setMyPhone,
   startFlow,
   stopRun,
+  uploadFlowMedia,
 } from "../src/index.js";
 import { type FakeEvolution, startFakeEvolution } from "../src/testing/fake-evolution.js";
 import { createMaster, db, resetDb } from "./helpers.js";
@@ -258,5 +259,63 @@ describe("fluxos", () => {
     expect(runs2).toHaveLength(0);
     await moveDeal(db, admin, org.id, deal?.id ?? "", won?.id ?? "");
     void conversations;
+  });
+
+  it("botão na conversa: texto, áudio e vídeo do carro saem na hora, em sequência, e a IA pausa", async () => {
+    const { org, admin, say } = await setup();
+    await say("oi, tem o HR-V?");
+    const audio = await uploadFlowMedia(db, admin, org.id, {
+      name: "hrv.ogg",
+      mime: "audio/ogg; codecs=opus",
+      data: Buffer.from("audio-falso"),
+    });
+    const video = await uploadFlowMedia(db, admin, org.id, {
+      name: "hrv.mp4",
+      mime: "video/mp4",
+      data: Buffer.from("video-falso"),
+    });
+    expect(audio.kind).toBe("audio");
+    await expect(
+      uploadFlowMedia(db, admin, org.id, {
+        name: "x.exe",
+        mime: "application/x-msdownload",
+        data: Buffer.from("x"),
+      }),
+    ).rejects.toThrow(/foto, vídeo, áudio ou PDF/);
+    const fid = await saveFlow(db, admin, org.id, null, {
+      name: "Apresentação HR-V",
+      trigger: "manual",
+      steps: [
+        { type: "message", text: "{nome}, olha o HR-V que separei:" },
+        { type: "media", mediaId: audio.id, kind: "audio", fileName: "hrv.ogg", caption: "" },
+        {
+          type: "media",
+          mediaId: video.id,
+          kind: "video",
+          fileName: "hrv.mp4",
+          caption: "Por dentro e por fora",
+        },
+      ],
+    });
+    await setFlowActive(db, admin, org.id, fid ?? "", true);
+    const [c] = await listConversations(db, admin, org.id);
+    fake.sent.length = 0;
+    const runId = await startFlow(db, admin, org.id, fid ?? "", c?.id ?? "");
+    expect((await processFlows(db, evo, { runId })).map((r) => r.result)).toEqual(["done"]);
+    expect(fake.sent.map((x) => x.kind)).toEqual(["sendText", "sendWhatsAppAudio", "sendMedia"]);
+    expect(fake.sent[0]?.body).toMatchObject({ text: "Joana, olha o HR-V que separei:" });
+    expect(fake.sent[2]?.body).toMatchObject({ mediatype: "video", caption: "Por dentro e por fora" });
+    const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, c?.id ?? "") });
+    expect(conv).toMatchObject({ aiPaused: true, aiPausedReason: "Fluxo enviado pela equipe" });
+    // Manual não gasta o limite diário de envios automáticos.
+    const { reserveAutomatedSend } = await import("../src/index.js");
+    await db.update(whatsappConnections).set({ nextAutomatedAt: null });
+    expect(
+      await reserveAutomatedSend(db, conv?.connectionId ?? "", {
+        gapMinSeconds: 30,
+        gapMaxSeconds: 30,
+        dailyLimit: 1,
+      }),
+    ).toBe(true);
   });
 });

@@ -9,7 +9,7 @@ export const metadata = { title: "Fluxos" };
 export const dynamic = "force-dynamic";
 
 const TRIGGER: Record<string, string> = {
-  manual: "Iniciado na conversa",
+  manual: "Botão Enviar fluxo na conversa",
   lead_created: "Lead novo",
   stage_entered: "Entrou na etapa",
   tag_added: "Ganhou a etiqueta",

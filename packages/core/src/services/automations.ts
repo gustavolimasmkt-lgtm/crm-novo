@@ -141,7 +141,8 @@ export async function reserveAutomatedSend(
     where id = ${connectionId}::uuid
       and (next_automated_at is null or next_automated_at <= now())
       and (select count(*) from messages m where m.connection_id = ${connectionId}::uuid
-           and m.automation is not null and m.sent_at >= ${dayStart.toISOString()}::timestamptz) < ${p.dailyLimit}
+           and m.automation is not null and m.automation <> 'flow_manual'
+           and m.sent_at >= ${dayStart.toISOString()}::timestamptz) < ${p.dailyLimit}
     returning id
   `);
   return rows.length > 0;

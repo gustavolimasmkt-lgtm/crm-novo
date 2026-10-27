@@ -104,6 +104,8 @@ const AUTOMATION_LABEL: Record<string, string> = {
   followup: "Follow-up",
   reminder: "Lembrete",
   campaign: "Campanha",
+  flow: "Fluxo",
+  flow_manual: "Fluxo",
 };
 
 function snippet(m: { body: string | null; type: Msg["type"] }) {
@@ -1269,7 +1271,7 @@ function Composer({
           aria-label="Fluxos disponíveis"
           className="absolute right-3 bottom-full left-3 mb-2 max-h-72 overflow-y-auto rounded-2xl bg-surface p-1 shadow-lg ring-1 ring-separator md:right-auto md:left-5 md:w-80"
         >
-          <li className="px-3 py-1.5 text-[12px] font-medium text-ink-3">Iniciar fluxo para este cliente</li>
+          <li className="px-3 py-1.5 text-[12px] font-medium text-ink-3">Enviar fluxo para este cliente</li>
           {flows.map((f) => (
             <li key={f.id}>
               <button
@@ -1395,8 +1397,8 @@ function Composer({
           <button
             type="button"
             onClick={() => setFlowMenu((v) => !v)}
-            aria-label="Iniciar fluxo"
-            title="Iniciar fluxo"
+            aria-label="Enviar fluxo"
+            title="Enviar fluxo"
             className={cx(
               "mb-1 rounded-full p-2 hover:bg-fill",
               flowMenu ? "bg-accent-soft text-accent" : "text-ink-2",
