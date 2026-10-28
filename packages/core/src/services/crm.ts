@@ -1,5 +1,6 @@
 import {
   auditLog,
+  capiEvents,
   contacts,
   type Database,
   dealEvents,
@@ -8,6 +9,7 @@ import {
   dealTags,
   type LeadSummary,
   memberships,
+  metaSettings,
   pipelineStages,
   pipelines,
   type StageKind,
@@ -455,6 +457,7 @@ export async function getBoard(
       assignedUserName: users.name,
       updatedAt: deals.updatedAt,
       createdAt: deals.createdAt,
+      qualification: deals.qualification,
       tagIds: sql<
         string[]
       >`coalesce((select array_agg(dt.tag_id) from ${dealTags} dt where dt.deal_id = ${deals.id}), '{}')`,
@@ -502,7 +505,7 @@ async function loadDeal(db: Db, actor: ActorU, organizationId: string, id: strin
 
 export async function getDeal(db: Database, actor: ActorU, organizationId: string, id: string) {
   const d = await loadDeal(db, actor, organizationId, id);
-  const [contact, stage, tagRows, evs, conv] = await Promise.all([
+  const [contact, stage, tagRows, evs, qEvents, ms, conv] = await Promise.all([
     db.query.contacts.findFirst({ where: eq(contacts.id, d.contactId) }),
     db.query.pipelineStages.findFirst({ where: eq(pipelineStages.id, d.stageId) }),
     db
@@ -523,6 +526,17 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
       .where(eq(dealEvents.dealId, d.id))
       .orderBy(desc(dealEvents.createdAt))
       .limit(100),
+    db
+      .select({
+        eventName: capiEvents.eventName,
+        status: capiEvents.status,
+        sendAfter: capiEvents.sendAfter,
+        sentAt: capiEvents.sentAt,
+        error: capiEvents.error,
+      })
+      .from(capiEvents)
+      .where(and(eq(capiEvents.dealId, d.id), inArray(capiEvents.eventName, Object.values(QUALIFY_EVENT)))),
+    db.query.metaSettings.findFirst({ where: eq(metaSettings.organizationId, organizationId) }),
     db.execute<{ id: string; ai_summary: LeadSummary | null; ai_summary_at: string | null }>(
       sql`select c.id, c.ai_summary, c.ai_summary_at from conversations c where c.contact_id = ${d.contactId} order by (c.connection_id = ${d.connectionId}) desc nulls last, c.last_message_at desc nulls last limit 1`,
     ),
@@ -540,6 +554,18 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
     tags: tagRows,
     events: evs,
     conversationId: conv[0]?.id ?? null,
+    qualifyMeta: {
+      enabled: !!ms?.capiEnabled,
+      sendQualified: !!ms?.capiEnabled && (ms?.sendQualified ?? true),
+      sendDisqualified: !!ms?.capiEnabled && (ms?.sendDisqualified ?? true),
+      events: qEvents.map((e) => ({
+        kind: e.eventName === "Qualified" ? ("qualified" as const) : ("disqualified" as const),
+        status: e.status,
+        sendAfter: e.sendAfter,
+        sentAt: e.sentAt,
+        error: e.error,
+      })),
+    },
     aiSummary: conv[0]?.ai_summary ?? null,
     aiSummaryAt: conv[0]?.ai_summary_at ?? null,
   };
@@ -662,6 +688,70 @@ export async function addDealNote(
   await db.update(deals).set({ updatedAt: new Date() }).where(eq(deals.id, d.id));
 }
 
+export const QUALIFY_UNDO_MINUTES = 5;
+const QUALIFY_EVENT = { qualified: "Qualified", disqualified: "Disqualified" } as const;
+
+/**
+ * Botão Qualificado / Desqualificado da negociação (não mexe na etapa).
+ * Com a API de Conversões ligada, põe o evento na fila com 5 min para desfazer; trocar ou desmarcar
+ * dentro desse tempo cancela o envio. O que já foi para a Meta não volta.
+ */
+export async function setDealQualification(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  id: string,
+  value: "qualified" | "disqualified" | null,
+  reason?: string | null,
+) {
+  if (value !== null && value !== "qualified" && value !== "disqualified")
+    throw new AppError("validation", "Escolha qualificado ou desqualificado.");
+  const d = await loadDeal(db, actor, organizationId, id);
+  const why = value === "disqualified" ? (reason ?? "").trim().slice(0, 200) || null : null;
+  if (d.qualification === value && (d.qualificationReason ?? null) === why) return;
+  await db
+    .update(deals)
+    .set({
+      qualification: value,
+      qualificationReason: why,
+      qualifiedAt: value ? new Date() : null,
+      qualifiedBy: value ? actor.userId : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(deals.id, d.id));
+  // Cancela o que ainda não saiu (o outro tipo, ou tudo se desmarcou).
+  const keep = value ? QUALIFY_EVENT[value] : null;
+  await db.delete(capiEvents).where(
+    and(
+      eq(capiEvents.dealId, d.id),
+      eq(capiEvents.status, "pending"),
+      inArray(
+        capiEvents.eventName,
+        Object.values(QUALIFY_EVENT).filter((n) => n !== keep),
+      ),
+    ),
+  );
+  if (value) {
+    const s = await db.query.metaSettings.findFirst({
+      where: eq(metaSettings.organizationId, organizationId),
+    });
+    const on = value === "qualified" ? s?.sendQualified : s?.sendDisqualified;
+    if (s?.capiEnabled && on)
+      await db
+        .insert(capiEvents)
+        .values({
+          organizationId,
+          dealId: d.id,
+          eventName: QUALIFY_EVENT[value],
+          eventTime: new Date(),
+          sendAfter: new Date(Date.now() + QUALIFY_UNDO_MINUTES * 60_000),
+        })
+        .onConflictDoNothing();
+  }
+  await event(db, organizationId, d.id, actor.userId, "qualification", { to: value, reason: why });
+  await notifyOrg(db, { o: organizationId, t: "conversation" });
+}
+
 /** Aplica etiquetas pelo nome (cria as que não existem). */
 export async function setDealTags(
   db: Database,
@@ -727,6 +817,8 @@ export async function getOpenDealForContact(
       stageName: pipelineStages.name,
       stageColor: pipelineStages.color,
       pipelineName: pipelines.name,
+      qualification: deals.qualification,
+      qualificationReason: deals.qualificationReason,
     })
     .from(deals)
     .innerJoin(pipelineStages, eq(pipelineStages.id, deals.stageId))

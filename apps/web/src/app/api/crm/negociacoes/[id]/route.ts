@@ -5,6 +5,7 @@ import {
   getDeal,
   moveDeal,
   parseMoneyToCents,
+  setDealQualification,
   setDealTags,
   updateDeal,
 } from "@crm/core";
@@ -29,6 +30,8 @@ type Body = {
   value?: string;
   sourceId?: string | null;
   description?: string | null;
+  qualification?: "qualified" | "disqualified" | null;
+  reason?: string | null;
 };
 
 export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
@@ -55,6 +58,9 @@ export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
         sourceId: b.sourceId === undefined ? undefined : b.sourceId || null,
         description: b.description,
       });
+      break;
+    case "qualify":
+      await setDealQualification(...a, b.qualification ?? null, b.reason ?? null);
       break;
     case "delete":
       await deleteDeal(...a);

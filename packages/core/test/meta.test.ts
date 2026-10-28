@@ -8,11 +8,13 @@ import {
   createEvolutionClient,
   createOrganization,
   getAdsReport,
+  getDeal,
   getMetaSettings,
   handleEvolutionWebhook,
   processCapi,
   refreshConnection,
   saveMetaSettings,
+  setDealQualification,
   syncAdNames,
   testMetaConnection,
 } from "../src/index.js";
@@ -217,6 +219,84 @@ describe("integração Meta", () => {
     for (let i = 0; i < 6; i++) await processCapi(db);
     const [ev] = await db.select().from(capiEvents);
     expect(ev).toMatchObject({ status: "failed", attempts: 5, error: "Invalid parameter" });
+  });
+});
+
+describe("botão qualificado / desqualificado", () => {
+  const due = () => db.update(capiEvents).set({ sendAfter: new Date(Date.now() - 1000) });
+  const lastSent = () =>
+    meta.events.map((e) => (e as { data: Record<string, unknown>[] }).data[0] as Record<string, unknown>);
+
+  it("espera 5 min para desfazer, troca cancela o pendente e manda o evento certo", async () => {
+    const { org, admin, fromAd } = await setup();
+    await saveMetaSettings(db, admin, org.id, settings);
+    await new Promise((r) => setTimeout(r, 5));
+    await fromAd("5548999990001");
+    const deal = (await db.select().from(deals))[0];
+    const id = deal?.id ?? "";
+    await processCapi(db); // Lead
+    meta.events.length = 0;
+
+    await setDealQualification(db, admin, org.id, id, "qualified");
+    expect(await processCapi(db)).toEqual({ found: 0, sent: 0 }); // ainda dentro dos 5 min
+    await setDealQualification(db, admin, org.id, id, "disqualified", "Sem entrada");
+    const pend = await db.select().from(capiEvents).where(eq(capiEvents.status, "pending"));
+    expect(pend.map((p) => p.eventName)).toEqual(["Disqualified"]);
+    expect(pend[0]?.sendAfter.getTime()).toBeGreaterThan(Date.now() + 4 * 60_000);
+
+    await due();
+    expect(await processCapi(db)).toEqual({ found: 1, sent: 1 });
+    expect(lastSent()[0]).toMatchObject({
+      event_name: "DisqualifiedLead",
+      action_source: "system_generated",
+      user_data: { ph: [sha256("5548999990001")] },
+    });
+    const d = await getDeal(db, admin, org.id, id);
+    expect(d).toMatchObject({ qualification: "disqualified", qualificationReason: "Sem entrada" });
+    expect(d.qualifyMeta.events).toEqual([expect.objectContaining({ kind: "disqualified", status: "sent" })]);
+    expect(d.events.some((e) => e.type === "qualification")).toBe(true);
+
+    // Desmarcar não apaga o que já foi; marcar de novo não reenvia.
+    await setDealQualification(db, admin, org.id, id, null);
+    await setDealQualification(db, admin, org.id, id, "disqualified");
+    await due();
+    expect(await processCapi(db)).toEqual({ found: 0, sent: 0 });
+
+    // Relatório de anúncios conta pelo botão.
+    await setDealQualification(db, admin, org.id, id, "qualified");
+    const r = await getAdsReport(db, admin, org.id, { period: "30d" });
+    expect(r.total).toMatchObject({ leads: 1, qualified: 1, disqualified: 0 });
+
+    // Envio desligado: só marca no CRM.
+    await saveMetaSettings(db, admin, org.id, { ...settings, sendQualified: false });
+    await setDealQualification(db, admin, org.id, id, null);
+    await db.delete(capiEvents).where(eq(capiEvents.eventName, "Qualified"));
+    await setDealQualification(db, admin, org.id, id, "qualified");
+    expect(await db.select().from(capiEvents).where(eq(capiEvents.eventName, "Qualified"))).toHaveLength(0);
+  });
+
+  it("modo de mensagens: QualifiedLead uma vez só, mesmo com visita marcada depois", async () => {
+    const { org, admin, fromAd } = await setup();
+    await saveMetaSettings(db, admin, org.id, { ...settings, wabaId: "4440001" });
+    await new Promise((r) => setTimeout(r, 5));
+    await fromAd("5548999990001", "120002", "CLID-999");
+    const id = (await db.select().from(deals))[0]?.id ?? "";
+    await processCapi(db);
+    meta.events.length = 0;
+    await setDealQualification(db, admin, org.id, id, "qualified");
+    await due();
+    await processCapi(db);
+    expect(lastSent()[0]).toMatchObject({ event_name: "QualifiedLead", action_source: "business_messaging" });
+    meta.events.length = 0;
+    await createAppointment(db, admin, org.id, {
+      phone: "5548999990001",
+      date: new Date(Date.now() + 48 * 3600_000).toISOString().slice(0, 10),
+      time: "10:00",
+    });
+    await processCapi(db);
+    expect(meta.events).toHaveLength(0);
+    const sch = await db.query.capiEvents.findFirst({ where: eq(capiEvents.eventName, "Schedule") });
+    expect(sch).toMatchObject({ status: "sent", error: "Já enviado como QualifiedLead" });
   });
 });
 

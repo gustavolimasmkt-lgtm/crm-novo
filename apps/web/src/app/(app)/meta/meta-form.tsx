@@ -15,10 +15,18 @@ type Settings = {
   sendLead: boolean;
   sendSchedule: boolean;
   sendPurchase: boolean;
+  sendQualified: boolean;
+  sendDisqualified: boolean;
   adAccountId: string;
   hasAdsToken: boolean;
 };
-const LABEL: Record<string, string> = { Lead: "Lead", Schedule: "Visita marcada", Purchase: "Venda" };
+const LABEL: Record<string, string> = {
+  Lead: "Lead",
+  Qualified: "Qualificado (botão)",
+  Disqualified: "Desqualificado (botão)",
+  Schedule: "Visita marcada",
+  Purchase: "Venda",
+};
 
 export function MetaForm({
   settings,
@@ -105,6 +113,8 @@ export function MetaForm({
           <div className="flex flex-wrap gap-4 text-[14px]">
             {[
               ["sendLead", "Lead (contato novo)", settings.sendLead],
+              ["sendQualified", "Qualificado (botão)", settings.sendQualified],
+              ["sendDisqualified", "Desqualificado (botão)", settings.sendDisqualified],
               ["sendSchedule", "Visita marcada", settings.sendSchedule],
               ["sendPurchase", "Venda (com valor)", settings.sendPurchase],
             ].map(([n, l, v]) => (
@@ -201,7 +211,7 @@ export function MetaForm({
         data-testid="status-capi"
       >
         <h2 className="text-[16px] font-semibold">Eventos enviados (30 dias)</h2>
-        {["Lead", "Schedule", "Purchase"].map((ev) => (
+        {["Lead", "Qualified", "Disqualified", "Schedule", "Purchase"].map((ev) => (
           <div key={ev} className="flex items-center justify-between text-[14px]">
             <span>{LABEL[ev]}</span>
             <span className="tabular-nums text-ink-2">
@@ -215,6 +225,11 @@ export function MetaForm({
         <p className="text-[12px] text-ink-3">
           Só entram negociações criadas ou movidas depois que a API foi ligada. O telefone vai em hash
           (SHA-256), nunca em texto.
+        </p>
+        <p className="text-[12px] text-ink-3">
+          Qualificado e desqualificado saem 5 minutos depois do clique na negociação, para dar tempo de
+          desfazer. Qualificado vai como QualifiedLead; desqualificado vai como evento personalizado
+          DisqualifiedLead (use para excluir públicos).
         </p>
       </aside>
     </div>

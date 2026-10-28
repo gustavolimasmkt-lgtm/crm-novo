@@ -31,6 +31,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { type Qualification, QualifyButtons } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime } from "@/lib/format";
 
@@ -132,7 +133,15 @@ function fillReply(body: string, contactName: string) {
     .trim();
 }
 type Connection = { id: string; name: string; phone: string | null; status: string };
-type DealChip = { id: string; number: number; stageName: string; stageColor: string; pipelineName: string };
+type DealChip = {
+  id: string;
+  number: number;
+  stageName: string;
+  stageColor: string;
+  pipelineName: string;
+  qualification: Qualification;
+  qualificationReason: string | null;
+};
 type FlowRun = {
   id: string;
   flowName: string;
@@ -614,6 +623,18 @@ function Thread({
         </div>
       )}
 
+      {c && thread?.deal && (
+        <div className="flex items-center gap-2 border-b border-separator px-4 py-1.5 text-[13px]">
+          <span className="shrink-0 text-ink-3">Lead:</span>
+          <QualifyButtons
+            compact
+            dealId={thread.deal.id}
+            value={thread.deal.qualification}
+            reason={thread.deal.qualificationReason}
+            onChanged={onChanged}
+          />
+        </div>
+      )}
       {c && <SummaryBar conv={c} onChanged={onChanged} />}
 
       {actionError && (

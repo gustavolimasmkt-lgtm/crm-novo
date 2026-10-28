@@ -80,5 +80,44 @@ test("Meta: lead de anúncio, integração, teste de conexão e resultado por ca
   await page.getByText("Cliente Teste").first().click();
   await expect(page.getByTestId("anuncio-negociacao")).toContainText("HR-V prata 2020");
   await expect(page.getByTestId("anuncio-negociacao")).toContainText("Instagram");
+
+  // Botões de qualificação (não mexem na etapa; evento sai em 5 min)
+  const q = page.getByRole("dialog", { name: "Negociação" }).getByTestId("qualificacao");
+  await q.getByRole("button", { name: "Qualificado", exact: true }).click();
+  await expect(q.getByRole("button", { name: "Qualificado", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(q.getByTestId("qualificacao-meta")).toContainText("Até lá dá para desfazer");
+  await q.getByRole("button", { name: "Desqualificado" }).click();
+  await q.getByLabel("Motivo da desqualificação").selectOption("Sem entrada");
+  await expect(q.getByRole("button", { name: "Desqualificado" })).toHaveAttribute("aria-pressed", "true");
+  await expect(q.getByRole("button", { name: "Qualificado", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect(page.getByText("Marcou como desqualificado (Sem entrada)")).toBeVisible();
+  await page.getByTestId("qualificacao").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/qualif-negociacao-${testInfo.project.name}.png` });
+  await expect(
+    page
+      .getByRole("dialog", { name: "Negociação" })
+      .getByLabel("Etapa", { exact: true })
+      .locator("option:checked"),
+  ).toHaveText("Novo lead");
+
+  // Na conversa também
+  await page.goto("/conversas");
+  await page.getByText("Cliente Teste").first().click();
+  const qc = page.getByTestId("qualificacao");
+  await expect(qc.getByRole("button", { name: "Desqualificado" })).toHaveAttribute("aria-pressed", "true");
+  await qc.getByRole("button", { name: "Qualificado", exact: true }).click();
+  await expect(qc.getByRole("button", { name: "Qualificado", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.screenshot({ path: `test-results/qualif-conversa-${testInfo.project.name}.png` });
+  await page.goto("/anuncios");
+  await expect(page.getByTestId("por-campanha")).toContainText("Qualificados");
   await page.screenshot({ path: `test-results/meta-${testInfo.project.name}.png`, fullPage: true });
 });

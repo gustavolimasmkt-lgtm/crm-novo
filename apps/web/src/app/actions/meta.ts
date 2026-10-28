@@ -18,6 +18,8 @@ export async function saveMetaAction(_: FormState, fd: FormData): Promise<FormSt
       sendLead: str(fd, "sendLead") === "on",
       sendSchedule: str(fd, "sendSchedule") === "on",
       sendPurchase: str(fd, "sendPurchase") === "on",
+      sendQualified: str(fd, "sendQualified") === "on",
+      sendDisqualified: str(fd, "sendDisqualified") === "on",
       adAccountId: str(fd, "adAccountId"),
       adsToken: str(fd, "adsToken"),
       removeAdsToken: str(fd, "removeAdsToken") === "on",

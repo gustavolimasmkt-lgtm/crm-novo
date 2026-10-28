@@ -1,5 +1,5 @@
 import { capiEvents, contacts, type Database, deals, metaAds, metaSettings } from "@crm/db";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, lt, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { type Actor, can } from "../auth/permissions.js";
 import { decryptSecret, encryptSecret, sha256 } from "../secret.js";
@@ -52,6 +52,8 @@ export async function getMetaSettings(db: Database, organizationId: string) {
     sendLead: s?.sendLead ?? true,
     sendSchedule: s?.sendSchedule ?? true,
     sendPurchase: s?.sendPurchase ?? true,
+    sendQualified: s?.sendQualified ?? true,
+    sendDisqualified: s?.sendDisqualified ?? true,
     adAccountId: s?.adAccountId ?? "",
     hasAdsToken: !!s?.adsTokenEnc,
   };
@@ -68,6 +70,8 @@ export const metaInput = z.object({
   sendLead: z.boolean().default(true),
   sendSchedule: z.boolean().default(true),
   sendPurchase: z.boolean().default(true),
+  sendQualified: z.boolean().default(true),
+  sendDisqualified: z.boolean().default(true),
   adAccountId: z
     .string()
     .trim()
@@ -112,6 +116,8 @@ export async function saveMetaSettings(
     sendLead: input.sendLead,
     sendSchedule: input.sendSchedule,
     sendPurchase: input.sendPurchase,
+    sendQualified: input.sendQualified,
+    sendDisqualified: input.sendDisqualified,
     adAccountId: input.adAccountId || null,
     adsTokenEnc,
     updatedAt: new Date(),
@@ -198,8 +204,24 @@ export async function queueCapiEvents(db: Database) {
 const BM_NAMES: Record<string, string> = {
   Lead: "LeadSubmitted",
   Schedule: "QualifiedLead",
+  Qualified: "QualifiedLead",
   Purchase: "Purchase",
 };
+/** Nomes fora do modo de mensagens (eventos personalizados para os botões). */
+const SYSTEM_NAMES: Record<string, string> = {
+  Qualified: "QualifiedLead",
+  Disqualified: "DisqualifiedLead",
+};
+
+/** Nome que a Meta recebe. Desqualificado não existe no modo de mensagens: vai como evento personalizado. */
+export function capiMetaName(
+  eventName: string,
+  deal: { ctwaClid: string | null },
+  s: { wabaId: string | null },
+) {
+  const bm = !!(s.wabaId && deal.ctwaClid) && eventName in BM_NAMES;
+  return { name: bm ? (BM_NAMES[eventName] as string) : (SYSTEM_NAMES[eventName] ?? eventName), bm };
+}
 
 /** Monta o evento no formato da Meta. Com WABA + ctwa_clid usa o modo de mensagens; senão, telefone com hash. */
 export function buildCapiEvent(
@@ -210,14 +232,14 @@ export function buildCapiEvent(
 ) {
   const phone = contact?.phone ? digits(contact.phone) : null;
   const first = (contact?.name ?? contact?.pushName ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  const businessMessaging = !!(s.wabaId && deal.ctwaClid);
+  const { name, bm: businessMessaging } = capiMetaName(ev.eventName, deal, s);
   const custom: Record<string, unknown> = { content_name: deal.title.slice(0, 100) };
   if (ev.eventName === "Purchase") {
     custom.currency = "BRL";
     custom.value = Math.round(Number(deal.valueCents)) / 100;
   }
   return {
-    event_name: businessMessaging ? (BM_NAMES[ev.eventName] ?? ev.eventName) : ev.eventName,
+    event_name: name,
     event_time: Math.floor(ev.eventTime.getTime() / 1000),
     event_id: ev.id,
     action_source: businessMessaging ? "business_messaging" : "system_generated",
@@ -241,12 +263,31 @@ export async function processCapi(db: Database, fetchImpl: FetchLike = fetch, li
     .innerJoin(deals, eq(deals.id, capiEvents.dealId))
     .leftJoin(contacts, eq(contacts.id, deals.contactId))
     .innerJoin(metaSettings, eq(metaSettings.organizationId, capiEvents.organizationId))
-    .where(and(eq(capiEvents.status, "pending"), lt(capiEvents.attempts, 5)))
+    .where(
+      and(
+        eq(capiEvents.status, "pending"),
+        lt(capiEvents.attempts, 5),
+        lte(capiEvents.sendAfter, new Date()),
+      ),
+    )
     .limit(limit);
   let sent = 0;
   for (const { ev, deal, contact, s } of pending) {
     try {
       if (!s.capiEnabled || !s.datasetId || !s.capiTokenEnc) throw new Error("API de Conversões desligada");
+      // Agendamento e botão Qualificado viram o mesmo QualifiedLead no modo de mensagens: manda um só.
+      const meta = capiMetaName(ev.eventName, deal, s);
+      const others = await db
+        .select({ eventName: capiEvents.eventName })
+        .from(capiEvents)
+        .where(and(eq(capiEvents.dealId, deal.id), eq(capiEvents.status, "sent"), ne(capiEvents.id, ev.id)));
+      if (others.some((o) => capiMetaName(o.eventName, deal, s).name === meta.name)) {
+        await db
+          .update(capiEvents)
+          .set({ status: "sent", sentAt: new Date(), error: `Já enviado como ${meta.name}` })
+          .where(eq(capiEvents.id, ev.id));
+        continue;
+      }
       const body: Record<string, unknown> = { data: [buildCapiEvent(ev, deal, contact, s)] };
       if (s.testEventCode) body.test_event_code = s.testEventCode;
       await graph(
@@ -277,7 +318,7 @@ export async function capiStatus(db: Database, organizationId: string) {
     where organization_id = ${organizationId}::uuid and created_at > now() - interval '30 days'
     group by 1, 2`);
   const [last] = await db.execute<{ error: string | null; created_at: string }>(sql`
-    select error, created_at from capi_events where organization_id = ${organizationId}::uuid and error is not null
+    select error, created_at from capi_events where organization_id = ${organizationId}::uuid and error is not null and status <> 'sent'
     order by created_at desc limit 1`);
   return {
     counts: rows.map((r) => ({ eventName: r.event_name, status: r.status, n: Number(r.n) })),
@@ -426,6 +467,8 @@ export async function getAdsReport(
     campaign_id: string | null;
     campaign_name: string | null;
     leads: number;
+    qualified: number;
+    disqualified: number;
     visits: number;
     won: number;
     won_cents: number;
@@ -433,6 +476,8 @@ export async function getAdsReport(
     select d.ad_id, max(d.ad_title) as ad_title, max(a.name) as ad_name, max(a.campaign_id) as campaign_id,
            max(a.campaign_name) as campaign_name,
            count(*)::int as leads,
+           count(*) filter (where d.qualification = 'qualified')::int as qualified,
+           count(*) filter (where d.qualification = 'disqualified')::int as disqualified,
            count(*) filter (where exists (select 1 from appointments ap where ap.deal_id = d.id
                                           and ap.status <> 'canceled'))::int as visits,
            count(*) filter (where s.kind = 'won')::int as won,
@@ -450,6 +495,8 @@ export async function getAdsReport(
     key: string;
     name: string;
     leads: number;
+    qualified: number;
+    disqualified: number;
     visits: number;
     won: number;
     wonCents: number;
@@ -460,7 +507,7 @@ export async function getAdsReport(
   const bump = (m: Map<string, Agg>, key: string, name: string) => {
     let a = m.get(key);
     if (!a) {
-      a = { key, name, leads: 0, visits: 0, won: 0, wonCents: 0, spend: 0 };
+      a = { key, name, leads: 0, qualified: 0, disqualified: 0, visits: 0, won: 0, wonCents: 0, spend: 0 };
       m.set(key, a);
     }
     return a;
@@ -481,6 +528,8 @@ export async function getAdsReport(
         : []),
     ]) {
       a.leads += Number(r.leads);
+      a.qualified += Number(r.qualified);
+      a.disqualified += Number(r.disqualified);
       a.visits += Number(r.visits);
       a.won += Number(r.won);
       a.wonCents += Number(r.won_cents);
@@ -499,6 +548,7 @@ export async function getAdsReport(
   const finish = <T extends Agg>(a: T) => ({
     ...a,
     cpl: a.spend && a.leads ? a.spend / a.leads : null,
+    costPerQualified: a.spend && a.qualified ? a.spend / a.qualified : null,
     costPerSale: a.spend && a.won ? a.spend / a.won : null,
     roas: a.spend ? a.wonCents / 100 / a.spend : null,
   });
@@ -507,12 +557,14 @@ export async function getAdsReport(
   const total = campaignList.reduce(
     (t, c) => ({
       leads: t.leads + c.leads,
+      qualified: t.qualified + c.qualified,
+      disqualified: t.disqualified + c.disqualified,
       visits: t.visits + c.visits,
       won: t.won + c.won,
       wonCents: t.wonCents + c.wonCents,
       spend: t.spend + c.spend,
     }),
-    { leads: 0, visits: 0, won: 0, wonCents: 0, spend: 0 },
+    { leads: 0, qualified: 0, disqualified: 0, visits: 0, won: 0, wonCents: 0, spend: 0 },
   );
   return {
     period,

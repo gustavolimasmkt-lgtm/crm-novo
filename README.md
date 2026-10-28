@@ -112,6 +112,7 @@ npx playwright test
 - Variáveis: `APP_SECRET` (obrigatória para guardar tokens; texto aleatório de 32+ caracteres). Opcionais: `META_GRAPH_URL`, `META_GRAPH_VERSION` (padrão v26.0).
 - Lead de clique para WhatsApp: `parseAdReferral` (externalAdReply/conversionSource) grava `deals.ad_*` e `ctwa_clid`.
 - API de Conversões: `queueCapiEvents` lê `deal_events` (created, stage scheduled/won) depois de ligar; `processCapi` envia (timer de 60 s).
+- Botão de qualificação: `setDealQualification` grava em `deals.qualification` e põe `Qualified`/`Disqualified` em `capi_events` com `send_after` = agora + 5 min (desmarcar ou trocar apaga o pendente). `processCapi` só pega eventos com `send_after` vencido e não reenvia um QualifiedLead já enviado para a mesma negociação.
 - Tela Anúncios: `getAdsReport` junta CRM com Insights (`act_<id>/insights`, level=ad).
 
 ## Fluxos

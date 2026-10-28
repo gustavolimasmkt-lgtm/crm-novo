@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const money = (v: number | null) => (v == null ? "–" : brl.format(v));
+const pct = (n: number, total: number) =>
+  n && total ? `${n} (${Math.round((n / total) * 100)}%)` : String(n);
 
 export default async function AdsPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   const ctx = await requirePermission("reports.view");
@@ -18,6 +20,9 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
     [
       "Leads",
       ...(spend ? ["Gasto", "Custo/lead"] : []),
+      "Qualificados",
+      ...(spend ? ["Custo/qualificado"] : []),
+      "Desqualificados",
       "Visitas",
       "Vendas",
       "Receita",
@@ -27,17 +32,23 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
     key: string;
     name: string;
     leads: number;
+    qualified: number;
+    disqualified: number;
     visits: number;
     won: number;
     wonCents: number;
     spend: number;
     cpl: number | null;
+    costPerQualified: number | null;
     costPerSale: number | null;
     roas: number | null;
   };
   const cells = (x: Row) => [
     String(x.leads),
     ...(r.hasSpend ? [money(x.spend), money(x.cpl)] : []),
+    String(x.qualified),
+    ...(r.hasSpend ? [money(x.costPerQualified)] : []),
+    pct(x.disqualified, x.leads),
     String(x.visits),
     String(x.won),
     money(x.wonCents / 100),
@@ -50,7 +61,7 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
         <p className="px-4 py-8 text-center text-[14px] text-ink-2">Nenhum lead de anúncio no período.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-[14px]">
+          <table className="w-full min-w-[960px] text-[14px]">
             <thead>
               <tr className="text-left text-[12px] uppercase tracking-wide text-ink-3">
                 <th className="px-4 py-2 font-medium">Nome</th>
@@ -123,7 +134,8 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
       </div>
       <p className="mt-4 text-[12px] text-ink-3">
         Lead de anúncio é quem chegou pelo botão do anúncio (clique para WhatsApp) ou tem a origem Meta Ads.
-        Visitas contam negociações com visita marcada; vendas e receita contam o que já foi ganho.
+        Qualificados e desqualificados vêm do botão na negociação. Visitas contam negociações com visita
+        marcada; vendas e receita contam o que já foi ganho.
       </p>
     </>
   );

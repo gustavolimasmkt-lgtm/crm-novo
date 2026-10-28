@@ -1,8 +1,20 @@
 "use client";
 
-import { ListTodo, MessageCircle, Plus, Search, Settings2, Trash2, Upload, X } from "lucide-react";
+import {
+  ListTodo,
+  MessageCircle,
+  Plus,
+  Search,
+  Settings2,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type Qualification, QualifyButtons, type QualifyMeta } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { formatPhone } from "@/lib/format";
 
@@ -18,6 +30,7 @@ type Deal = {
   assignedUserName: string | null;
   updatedAt: string;
   createdAt: string;
+  qualification: Qualification;
   tagIds: string[];
 };
 type Stage = {
@@ -325,6 +338,17 @@ export function Board({
                   <div className="mt-2 flex items-center gap-2 text-[12px] text-ink-3">
                     {d.assignedUserName ? <Avatar name={d.assignedUserName} size={20} /> : null}
                     <span className="min-w-0 flex-1 truncate">{d.assignedUserName ?? "Sem responsável"}</span>
+                    {d.qualification && (
+                      <span
+                        className={cx(
+                          "inline-flex items-center",
+                          d.qualification === "qualified" ? "text-ok" : "text-danger",
+                        )}
+                        title={d.qualification === "qualified" ? "Qualificado" : "Desqualificado"}
+                      >
+                        {d.qualification === "qualified" ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
+                      </span>
+                    )}
                     <span>{daysSince(d.updatedAt)}</span>
                   </div>
                 </button>
@@ -390,6 +414,9 @@ type DealDetail = {
     actorName: string | null;
   }[];
   conversationId: string | null;
+  qualification: Qualification;
+  qualificationReason: string | null;
+  qualifyMeta: QualifyMeta;
   adId: string | null;
   adTitle: string | null;
   adUrl: string | null;
@@ -423,6 +450,12 @@ function eventText(e: DealDetail["events"][number]) {
       return `Etiquetas: ${((d.tags as string[]) ?? []).join(", ") || "nenhuma"}`;
     case "note":
       return String(d.text ?? "");
+    case "qualification":
+      return d.to === "qualified"
+        ? "Marcou como qualificado"
+        : d.to === "disqualified"
+          ? `Marcou como desqualificado${d.reason ? ` (${d.reason})` : ""}`
+          : "Tirou a qualificação";
     default:
       return e.type;
   }
@@ -544,6 +577,21 @@ function DealPanel({
                 )}
               </div>
             )}
+            <section className="rounded-[var(--radius-card)] bg-surface p-4">
+              <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">
+                Qualificação do lead
+              </h3>
+              <QualifyButtons
+                dealId={d.id}
+                value={d.qualification}
+                reason={d.qualificationReason}
+                meta={d.qualifyMeta}
+                onChanged={() => {
+                  reload();
+                  onChanged();
+                }}
+              />
+            </section>
             <Link
               href={`/tarefas?negociacao=${d.id}`}
               className="flex items-center justify-between rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[15px] hover:bg-fill/60"

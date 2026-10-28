@@ -495,6 +495,11 @@ export const deals = pgTable(
     adUrl: text("ad_url"),
     adApp: text("ad_app"),
     ctwaClid: text("ctwa_clid"),
+    /** Botão Qualificado / Desqualificado (independe da etapa). */
+    qualification: text("qualification").$type<"qualified" | "disqualified">(),
+    qualificationReason: text("qualification_reason"),
+    qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+    qualifiedBy: uuid("qualified_by").references(() => users.id, { onDelete: "set null" }),
     stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -787,7 +792,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 14 as const;
+export const schemaVersion = 15 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -894,6 +899,8 @@ export const metaSettings = pgTable("meta_settings", {
   sendLead: boolean("send_lead").notNull().default(true),
   sendSchedule: boolean("send_schedule").notNull().default(true),
   sendPurchase: boolean("send_purchase").notNull().default(true),
+  sendQualified: boolean("send_qualified").notNull().default(true),
+  sendDisqualified: boolean("send_disqualified").notNull().default(true),
   adAccountId: text("ad_account_id"),
   adsTokenEnc: text("ads_token_enc"),
   updatedAt: updatedAt(),
@@ -913,6 +920,8 @@ export const capiEvents = pgTable(
       .references(() => deals.id, { onDelete: "cascade" }),
     eventName: text("event_name").notNull(),
     eventTime: timestamp("event_time", { withTimezone: true }).notNull(),
+    /** Só envia a partir daqui (botão de qualificação: 5 min para desfazer). */
+    sendAfter: timestamp("send_after", { withTimezone: true }).notNull().defaultNow(),
     status: capiEventStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     error: text("error"),
