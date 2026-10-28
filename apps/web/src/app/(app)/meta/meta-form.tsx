@@ -41,6 +41,26 @@ export function MetaForm({
   const [test, setTest] = useState<{ item: string; ok: boolean; detail: string }[] | null>(null);
   const [testErr, setTestErr] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [backfill, setBackfill] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  async function runBackfill() {
+    setBackfilling(true);
+    setBackfill(null);
+    try {
+      const r = await fetch("/api/meta/reenviar", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Falhou.");
+      setBackfill(
+        j.queued
+          ? `${j.queued} evento(s) na fila. Saem em até alguns minutos; recarregue para ver o resultado.`
+          : "Nada novo para enviar nos últimos 7 dias.",
+      );
+    } catch (e) {
+      setBackfill((e as Error).message);
+    } finally {
+      setBackfilling(false);
+    }
+  }
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -222,6 +242,21 @@ export function MetaForm({
           </div>
         ))}
         {status.lastError && <p className="text-[13px] text-danger">Último erro: {status.lastError}</p>}
+        {settings.capiEnabled && (
+          <div className="space-y-1.5 border-t border-separator pt-3">
+            <Button size="sm" variant="secondary" onClick={runBackfill} disabled={backfilling}>
+              {backfilling ? "Enviando…" : "Enviar também os últimos 7 dias"}
+            </Button>
+            <p className="text-[12px] text-ink-3">
+              Leads, visitas e vendas dos últimos 7 dias que ainda não foram. A Meta não aceita mais antigos.
+            </p>
+            {backfill && (
+              <p className="text-[13px]" data-testid="reenvio">
+                {backfill}
+              </p>
+            )}
+          </div>
+        )}
         <p className="text-[12px] text-ink-3">
           Só entram negociações criadas ou movidas depois que a API foi ligada. O telefone vai em hash
           (SHA-256), nunca em texto.

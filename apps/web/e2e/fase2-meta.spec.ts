@@ -119,5 +119,8 @@ test("Meta: lead de anúncio, integração, teste de conexão e resultado por ca
   await page.screenshot({ path: `test-results/qualif-conversa-${testInfo.project.name}.png` });
   await page.goto("/anuncios");
   await expect(page.getByTestId("por-campanha")).toContainText("Qualificados");
+  await page.goto("/meta");
+  await page.getByRole("button", { name: "Enviar também os últimos 7 dias" }).click();
+  await expect(page.getByTestId("reenvio")).toContainText(/na fila|Nada novo/);
   await page.screenshot({ path: `test-results/meta-${testInfo.project.name}.png`, fullPage: true });
 });

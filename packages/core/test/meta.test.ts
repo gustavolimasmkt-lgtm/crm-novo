@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   acceptInvitation,
+  backfillCapi,
   createAppointment,
   createConnection,
   createEvolutionClient,
@@ -209,6 +210,18 @@ describe("integração Meta", () => {
       messaging_channel: "whatsapp",
       user_data: { whatsapp_business_account_id: "4440001", ctwa_clid: "CLID-999" },
     });
+  });
+
+  it("enviar os últimos 7 dias pega o que entrou antes de ligar, sem duplicar", async () => {
+    const { org, admin, fromAd } = await setup();
+    await fromAd("5548999990001"); // antes de ligar
+    await expect(backfillCapi(db, admin, org.id)).rejects.toThrow(/Ligue/);
+    await saveMetaSettings(db, admin, org.id, settings);
+    expect(await processCapi(db)).toEqual({ found: 0, sent: 0 });
+    expect(await backfillCapi(db, admin, org.id)).toBe(1);
+    expect(await backfillCapi(db, admin, org.id)).toBe(0);
+    expect(await processCapi(db)).toEqual({ found: 1, sent: 1 });
+    await expect(backfillCapi(db, { ...admin, role: "seller" }, org.id)).rejects.toThrow(/gestores/);
   });
 
   it("erro da Meta: tenta de novo e desiste depois de 5", async () => {

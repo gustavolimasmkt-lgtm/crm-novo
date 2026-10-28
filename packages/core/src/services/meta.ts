@@ -148,7 +148,16 @@ export async function testMetaConnection(
       );
       out.push({ item: "API de Conversões", ok: true, detail: `Conjunto de dados: ${r.name ?? r.id}` });
     } catch (e) {
-      out.push({ item: "API de Conversões", ok: false, detail: (e as Error).message });
+      const msg = (e as Error).message;
+      // Token gerado no Gerenciador de Eventos só envia eventos; ler o nome do conjunto dá #100.
+      if (/missing permission/i.test(msg))
+        out.push({
+          item: "API de Conversões",
+          ok: true,
+          detail:
+            "Token aceito. Ele só tem permissão para enviar eventos (não lê o nome do conjunto), o que é normal no token do Gerenciador de Eventos. O primeiro envio confirma.",
+        });
+      else out.push({ item: "API de Conversões", ok: false, detail: msg });
     }
   }
   if (s?.adAccountId && s.adsTokenEnc) {
@@ -189,7 +198,7 @@ export async function queueCapiEvents(db: Database) {
     from deal_events e
     join meta_settings ms on ms.organization_id = e.organization_id and ms.capi_enabled
     where e.created_at >= ms.capi_enabled_at
-      and e.created_at > now() - interval '7 days'
+      and e.created_at > now() - interval '6 days 22 hours'
       and (
         (e.type = 'created' and ms.send_lead) or
         (e.type = 'stage' and e.data->>'kind' = 'scheduled' and ms.send_schedule) or
@@ -199,6 +208,25 @@ export async function queueCapiEvents(db: Database) {
     returning id
   `);
   return rows.length;
+}
+
+/**
+ * Põe na fila os eventos dos últimos 7 dias (a Meta recusa mais antigos), como se a API estivesse ligada
+ * desde então. Não duplica o que já foi. Devolve quantos entraram na fila.
+ */
+export async function backfillCapi(db: Database, actor: ActorU, organizationId: string) {
+  requireManage(actor);
+  const s = await db.query.metaSettings.findFirst({ where: eq(metaSettings.organizationId, organizationId) });
+  if (!s?.capiEnabled) throw new AppError("validation", "Ligue a API de Conversões antes de enviar.");
+  const since = new Date(Date.now() - 7 * 86_400_000 + 2 * 3600_000);
+  if (!s.capiEnabledAt || s.capiEnabledAt > since)
+    await db
+      .update(metaSettings)
+      .set({ capiEnabledAt: since })
+      .where(eq(metaSettings.organizationId, organizationId));
+  const before = await db.$count(capiEvents, eq(capiEvents.organizationId, organizationId));
+  await queueCapiEvents(db);
+  return (await db.$count(capiEvents, eq(capiEvents.organizationId, organizationId))) - before;
 }
 
 const BM_NAMES: Record<string, string> = {
