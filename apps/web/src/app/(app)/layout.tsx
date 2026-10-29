@@ -1,5 +1,6 @@
-import { can, listMyOrganizations } from "@crm/core";
+import { can, connectionAlerts, listMyOrganizations } from "@crm/core";
 import { getDb } from "@crm/db";
+import { ConnectionBanner } from "@/components/connection-banner";
 import { Notifier } from "@/components/notifier";
 import { Shell } from "@/components/shell";
 import { requireOrg } from "@/lib/session";
@@ -8,7 +9,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireOrg();
-  const orgs = await listMyOrganizations(getDb(), ctx.user.id, ctx.user.isMaster);
+  const [orgs, alerts] = await Promise.all([
+    listMyOrganizations(getDb(), ctx.user.id, ctx.user.isMaster),
+    connectionAlerts(getDb(), ctx.organization.id),
+  ]);
   return (
     <Shell
       user={ctx.user}
@@ -18,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       canManageConnections={can(ctx.actor, "connections.manage")}
       canConfigure={can(ctx.actor, "settings.manage")}
     >
+      <ConnectionBanner initial={alerts} canManage={can(ctx.actor, "connections.manage")} />
       <Notifier />
       {children}
     </Shell>

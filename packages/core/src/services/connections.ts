@@ -240,7 +240,16 @@ export async function disconnectConnection(
   }
   await db
     .update(whatsappConnections)
-    .set({ status: "close", qrCode: null, qrUpdatedAt: null, updatedAt: new Date() })
+    // Desconectada de propósito: sai do monitor de quedas até conectar de novo.
+    .set({
+      status: "close",
+      qrCode: null,
+      qrUpdatedAt: null,
+      connectedAt: null,
+      downSince: null,
+      downAlertedAt: null,
+      updatedAt: new Date(),
+    })
     .where(eq(whatsappConnections.id, c.id));
   await audit(db, organizationId, actor.userId, "connection.disconnected", c.id);
 }

@@ -6,7 +6,7 @@ export const EVENTS_CHANNEL = "crm_events";
 export type OrgEvent = {
   /** organização */
   o: string;
-  t: "message" | "conversation" | "connection" | "inbound";
+  t: "message" | "conversation" | "connection" | "connection_down" | "inbound";
   /** conversa */
   c?: string;
   /** inbound: responsável da conversa (null = sem dono) */

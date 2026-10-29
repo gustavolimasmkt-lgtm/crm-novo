@@ -223,6 +223,10 @@ export const whatsappConnections = pgTable(
     connectedAt: timestamp("connected_at", { withTimezone: true }),
     /** Próximo envio automático permitido (anti-bloqueio). */
     nextAutomatedAt: timestamp("next_automated_at", { withTimezone: true }),
+    /** Monitor: desde quando está fora do ar, quando avisou e desde quando a Evolution não responde. */
+    downSince: timestamp("down_since", { withTimezone: true }),
+    downAlertedAt: timestamp("down_alerted_at", { withTimezone: true }),
+    checkFailedSince: timestamp("check_failed_since", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -814,7 +818,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 18 as const;
+export const schemaVersion = 19 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

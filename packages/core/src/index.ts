@@ -22,6 +22,7 @@ export * from "./services/flows.js";
 export * from "./services/inactivity.js";
 export * from "./services/messages.js";
 export * from "./services/meta.js";
+export * from "./services/monitor.js";
 export * from "./services/organizations.js";
 export * from "./services/password.js";
 export * from "./services/quick-replies.js";

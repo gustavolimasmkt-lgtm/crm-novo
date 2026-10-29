@@ -33,6 +33,10 @@ export async function GET(req: Request) {
           );
           return;
         }
+        if (ev.t === "connection_down") {
+          send(`data: ${JSON.stringify({ t: ev.t, c: ev.c ?? null, n: ev.n })}\n\n`);
+          return;
+        }
         send(`data: ${JSON.stringify({ t: ev.t, c: ev.c ?? null })}\n\n`);
       };
       hub.emitter.on(orgId, onEvent);

@@ -18,6 +18,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { type Qualification, QualifyButtons, type QualifyMeta } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { formatPhone } from "@/lib/format";
+import { subscribeLive } from "@/lib/live";
 import { DealList } from "./deal-list";
 
 type Deal = {
@@ -145,17 +146,17 @@ export function Board({
   }, [pipelineId, open, view]);
 
   useEffect(() => {
-    const es = new EventSource("/api/eventos");
     let t: ReturnType<typeof setTimeout> | null = null;
-    es.onmessage = () => {
+    const off = subscribeLive((ev) => {
+      if (ev.t === "inbound" || ev.t === "connection_down") return;
       if (t) clearTimeout(t);
       t = setTimeout(() => {
         load();
         setTick((n) => n + 1);
       }, 400);
-    };
+    });
     return () => {
-      es.close();
+      off();
       if (t) clearTimeout(t);
     };
   }, [load]);

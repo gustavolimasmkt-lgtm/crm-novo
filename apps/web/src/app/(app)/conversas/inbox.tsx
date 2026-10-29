@@ -34,6 +34,7 @@ import {
 import { type Qualification, QualifyButtons } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime } from "@/lib/format";
+import { subscribeLive } from "@/lib/live";
 
 type Filter = "open" | "unread" | "mine" | "closed" | "all";
 type Conv = {
@@ -260,20 +261,18 @@ export function Inbox({
 
   // Tempo real.
   useEffect(() => {
-    const es = new EventSource("/api/eventos");
     let timer: ReturnType<typeof setTimeout> | null = null;
-    es.onopen = () => setLive(true);
-    es.onerror = () => setLive(false);
-    es.onmessage = (e) => {
-      const ev = JSON.parse(e.data) as { t: string; c: string | null };
+    const off = subscribeLive((raw) => {
+      const ev = raw as { t: string; c: string | null };
+      if (ev.t === "inbound" || ev.t === "connection_down") return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         loadList();
         if (selectedRef.current && (!ev.c || ev.c === selectedRef.current)) loadThread(selectedRef.current);
       }, 150);
-    };
+    }, setLive);
     return () => {
-      es.close();
+      off();
       if (timer) clearTimeout(timer);
     };
   }, [loadList, loadThread]);

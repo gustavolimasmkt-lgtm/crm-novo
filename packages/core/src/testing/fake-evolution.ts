@@ -106,6 +106,18 @@ export async function startFakeEvolution(
       await api.scan(latest, "5548996743297", true);
       return send(200, { ok: true, instance: latest });
     }
+    // Simula a queda silenciosa (sem webhook) da última conexão aberta.
+    if (req.method === "POST" && path === "/__test/drop-latest") {
+      const latest = [...instances.entries()]
+        .filter(([n, i]) => n.startsWith("crm_") && i.state === "open")
+        .at(-1)?.[0];
+      if (!latest) return send(404, { error: "nenhuma instância conectada" });
+      const i = instances.get(latest);
+      if (i) i.state = "close";
+      if (u.searchParams.get("webhook") === "1")
+        await notify(latest, "connection.update", { instance: latest, state: "close" });
+      return send(200, { ok: true, instance: latest });
+    }
     if (req.method === "POST" && path === "/__test/incoming") {
       const b = ((await body(req)) ?? {}) as { text?: string; from?: string; audio?: boolean; ad?: boolean };
       const latest = [...instances.entries()]

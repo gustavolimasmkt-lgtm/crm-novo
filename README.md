@@ -134,3 +134,10 @@ npx playwright test
 
 - Esqueci minha senha (`services/password.ts`): link por WhatsApp (`users.phone`) usando uma conexão aberta de uma empresa da pessoa; tabela `password_resets` guarda só o hash. Páginas `/esqueci-senha` e `/redefinir-senha?t=`.
 - Aviso no navegador: `storeParsedMessage` emite o evento `inbound` (responsável, nome, prévia); `/api/eventos` só repassa para quem pode ver a conversa; `components/notifier.tsx` toca o som (WebAudio), mostra a notificação e conta no título.
+
+## Monitor do WhatsApp
+
+- `monitorConnections` (timer de 2 min) chama `connectionState` de cada conexão ativa que já conectou; guarda `down_since`, `down_alerted_at` e `check_failed_since`. Avisa uma vez por queda depois de 2 min (evento `connection_down`, aviso por outra conexão para admin/gestor).
+- `connectionAlerts` alimenta a faixa vermelha (`components/connection-banner.tsx`).
+- Tempo real no navegador: uma única conexão SSE por aba (`lib/live.ts`), compartilhada por faixa, avisos, quadro e conversas.
+- Backup: o plano Hobby do Railway não tem backup de volume; no Pro, ligar Daily/Weekly na aba Backups do Postgres.

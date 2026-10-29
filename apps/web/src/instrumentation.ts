@@ -3,6 +3,7 @@
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
  * - Meta: API de Conversões e nomes dos anúncios (a cada 60 s);
  * - CRM: move negociações paradas pelas regras de inatividade (a cada 5 min);
+ * - confere se cada WhatsApp continua conectado e avisa a equipe se cair (a cada 2 min);
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
  * - lembra os clientes das visitas, avisa tarefas, envia mensagens agendadas, campanhas e fluxos (a cada 20 s);
  * - follow-up: a IA retoma clientes que pararam de responder (a cada 20 s, respeitando o anti-bloqueio);
@@ -81,6 +82,20 @@ export async function register() {
         reminding = false;
       }
     }, 20_000).unref?.();
+    // Monitor: confere na Evolution se cada WhatsApp continua conectado (a cada 2 min).
+    let monitoring = false;
+    setInterval(async () => {
+      if (monitoring) return;
+      monitoring = true;
+      try {
+        const r = await core.monitorConnections(getDb(), evo);
+        if (r.alerted) console.warn(`[monitor] ${r.alerted} conexão(ões) fora do ar`);
+      } catch (e) {
+        console.error("[monitor]", e);
+      } finally {
+        monitoring = false;
+      }
+    }, 120_000).unref?.();
   }
 
   const {

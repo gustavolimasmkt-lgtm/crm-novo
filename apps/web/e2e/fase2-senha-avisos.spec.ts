@@ -87,6 +87,8 @@ test("esqueci a senha pelo WhatsApp e aviso de mensagem no navegador", async ({
   await page.getByRole("button", { name: "Sair" }).first().click();
   await page.waitForURL(/\/login/);
   await page.getByRole("link", { name: "Esqueci minha senha" }).click();
+  await page.waitForURL(/\/esqueci-senha/);
+  await expect(page.getByRole("button", { name: "Mandar link" })).toBeVisible();
   await page.getByLabel("E-mail").fill(email);
   await page.getByRole("button", { name: "Mandar link" }).click();
   await expect(page.getByText("mandamos o link agora")).toBeVisible();
@@ -111,5 +113,15 @@ test("esqueci a senha pelo WhatsApp e aviso de mensagem no navegador", async ({
   // Link usado não vale de novo.
   await page.goto(path);
   await expect(page.getByText("Link vencido")).toBeVisible();
+
+  // WhatsApp caiu: faixa vermelha em todas as telas, com Reconectar para o administrador.
+  await page.goto("/crm");
+  await expect(page.getByTestId("faixa-conexao")).toHaveCount(0);
+  await fetch(`${FAKE}/__test/drop-latest?webhook=1`, { method: "POST" });
+  const faixa = page.getByTestId("faixa-conexao");
+  await expect(faixa).toContainText('WhatsApp "Loja" desconectado', { timeout: 15_000 });
+  await faixa.getByRole("link", { name: "Reconectar" }).click();
+  await expect(page).toHaveURL(/\/conexoes/);
+  await page.screenshot({ path: `test-results/faixa-${testInfo.project.name}.png` });
   await page.screenshot({ path: `test-results/senha-${testInfo.project.name}.png` });
 });

@@ -127,6 +127,13 @@
       "when": 1793292049620,
       "tag": "0017_senha",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793296441441,
+      "tag": "0018_monitor",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@
 import { Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import { subscribeLive } from "@/lib/live";
 
 const PREFS_KEY = "crm.avisos";
 const DISMISS_KEY = "crm.avisos.pergunta";
@@ -103,12 +104,16 @@ export function Notifier() {
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    const es = new EventSource("/api/eventos");
-    es.onmessage = (e) => {
-      let ev: Inbound;
-      try {
-        ev = JSON.parse(e.data);
-      } catch {
+    const off = subscribeLive((raw) => {
+      const ev = raw as unknown as Inbound;
+      if (raw.t === "connection_down") {
+        const name = String(raw.n ?? "WhatsApp");
+        if (readPrefs().sound) playDing();
+        showDesktopNotice(
+          `WhatsApp "${name}" desconectado`,
+          "Mensagens de clientes não estão chegando. Reconecte em Conexões.",
+          null,
+        );
         return;
       }
       if (ev.t !== "inbound") return;
@@ -126,9 +131,9 @@ export function Notifier() {
         document.title = `(${unread}) ${strip()}`;
         if (prefs.desktop) showDesktopNotice(title, ev.p ?? "", ev.c);
       }
-    };
+    });
     return () => {
-      es.close();
+      off();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pointerdown", unlockAudio);
     };
