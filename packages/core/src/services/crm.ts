@@ -218,6 +218,7 @@ export const dealInput = z.object({
   phone: z.string().optional(),
   contactName: z.string().trim().max(80).optional(),
   title: z.string().trim().max(120).optional(),
+  interest: z.string().trim().max(120).optional(),
   valueCents: z.number().int().min(0).max(1e13).default(0),
   stageId: z.string().uuid().optional(),
   assignedUserId: z.string().uuid().nullable().optional(),
@@ -268,6 +269,7 @@ export async function createDeal(
         stageId: stage.id,
         contactId,
         title: input.title || contact?.name || contact?.pushName || contact?.phone || "Negociação",
+        interest: input.interest || null,
         valueCents: can(actor, "deals.view_values") ? input.valueCents : 0,
         assignedUserId: assigned,
         sourceId: input.sourceId ?? null,
@@ -431,6 +433,7 @@ export async function getBoard(
     conds.push(
       or(
         ilike(deals.title, `%${q}%`),
+        ilike(deals.interest, `%${q}%`),
         ilike(contacts.name, `%${q}%`),
         digits.length >= 3 ? ilike(contacts.phone, `%${digits}%`) : undefined,
         /^\d+$/.test(q) ? eq(deals.number, Number(q)) : undefined,
@@ -449,6 +452,7 @@ export async function getBoard(
       id: deals.id,
       number: deals.number,
       title: deals.title,
+      interest: deals.interest,
       valueCents: deals.valueCents,
       stageId: deals.stageId,
       contactId: deals.contactId,
@@ -573,6 +577,7 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
 
 export const dealPatchInput = z.object({
   title: z.string().trim().min(1, "Informe o título.").max(120).optional(),
+  interest: z.string().trim().max(120).nullable().optional(),
   valueCents: z.number().int().min(0).max(1e13).optional(),
   sourceId: z.string().uuid().nullable().optional(),
   connectionId: z.string().uuid().nullable().optional(),
@@ -610,6 +615,7 @@ export async function updateDeal(
     .set({
       ...p,
       description: p.description === undefined ? undefined : p.description || null,
+      interest: p.interest === undefined ? undefined : p.interest || null,
       updatedAt: new Date(),
     })
     .where(eq(deals.id, d.id));
@@ -620,6 +626,8 @@ export async function updateDeal(
     });
   if (p.title && p.title !== d.title)
     await event(db, organizationId, d.id, actor.userId, "title", { to: p.title });
+  if (p.interest !== undefined && (p.interest || null) !== d.interest)
+    await event(db, organizationId, d.id, actor.userId, "interest", { to: p.interest || null });
   await notifyOrg(db, { o: organizationId, t: "conversation" });
 }
 
@@ -819,6 +827,7 @@ export async function getOpenDealForContact(
       pipelineName: pipelines.name,
       qualification: deals.qualification,
       qualificationReason: deals.qualificationReason,
+      interest: deals.interest,
     })
     .from(deals)
     .innerJoin(pipelineStages, eq(pipelineStages.id, deals.stageId))

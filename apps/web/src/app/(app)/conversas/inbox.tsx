@@ -141,6 +141,7 @@ type DealChip = {
   pipelineName: string;
   qualification: Qualification;
   qualificationReason: string | null;
+  interest: string | null;
 };
 type FlowRun = {
   id: string;
@@ -557,6 +558,7 @@ function Thread({
                   />
                   <span className="truncate">
                     {thread.deal.pipelineName} · {thread.deal.stageName}
+                    {thread.deal.interest ? ` · ${thread.deal.interest}` : ""}
                   </span>
                 </Link>
               )}

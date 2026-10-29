@@ -154,6 +154,22 @@ describe("funil e negociações", () => {
     expect(ev.map((e) => e.type).sort()).toEqual(["created", "note", "stage", "value"]);
   });
 
+  it("carro / interesse: grava, aparece no card, entra na busca e no histórico", async () => {
+    const { org, mk } = await setup();
+    const seller = await mk("v@crm.com", "Vendedor Um", "seller");
+    const id = await createDeal(db, seller, org.id, { phone: "48 99888-7766", interest: "HR-V prata 2020" });
+    expect((await getDeal(db, seller, org.id, id)).interest).toBe("HR-V prata 2020");
+    await updateDeal(db, seller, org.id, id, { interest: "Corolla 2019" });
+    const card = (await getBoard(db, seller, org.id)).stages.flatMap((s) => s.deals).find((d) => d.id === id);
+    expect(card?.interest).toBe("Corolla 2019");
+    const found = (await getBoard(db, seller, org.id, { q: "corolla" })).stages.flatMap((s) => s.deals);
+    expect(found.map((d) => d.id)).toEqual([id]);
+    await updateDeal(db, seller, org.id, id, { interest: "" });
+    expect((await getDeal(db, seller, org.id, id)).interest).toBeNull();
+    const ev = await db.select().from(dealEvents).where(eq(dealEvents.dealId, id));
+    expect(ev.filter((e) => e.type === "interest")).toHaveLength(2);
+  });
+
   it("vendedor vê as dele e sem dono; atendente não vê valores; só gestor redistribui", async () => {
     const { org, admin, mk } = await setup();
     const s1 = await mk("s1@crm.com", "Vendedor A", "seller");

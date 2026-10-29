@@ -68,6 +68,7 @@ test("CRM: lead automático, etapas, valor, etiqueta, anotação, arrastar, nova
   await panel.getByLabel("Etapa").selectOption({ label: "Proposta" });
   await expect(page.getByRole("region", { name: "Etapa Proposta" }).getByTestId("deal-card")).toHaveCount(1);
   await panel.getByLabel("Valor (R$)").fill("64.900,00");
+  await panel.getByLabel("Carro / interesse").fill("HR-V prata 2020");
   await panel.getByRole("button", { name: "Salvar" }).click();
   await expect(panel.getByText("Salvo.")).toBeVisible();
   await panel.getByLabel("Adicionar etiqueta").fill("Lead quente");
@@ -78,6 +79,9 @@ test("CRM: lead automático, etapas, valor, etiqueta, anotação, arrastar, nova
   await expect(panel.getByText("Cliente quer trocar o Gol 2012")).toBeVisible();
   await expect(panel.getByText("Mudou de Novo lead para Proposta")).toBeVisible();
   await panel.getByRole("button", { name: "Fechar" }).last().click();
+  await expect(
+    page.getByRole("region", { name: "Etapa Proposta" }).getByTestId("deal-interest"),
+  ).toHaveText("HR-V prata 2020");
   await expect(page.getByRole("region", { name: "Etapa Proposta" })).toContainText("R$ 64.900,00");
 
   // Arrastar (computador) ou trocar etapa pelo painel (celular) para Ganho

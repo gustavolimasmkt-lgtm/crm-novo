@@ -478,6 +478,8 @@ export const deals = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    /** Carro / produto de interesse (aparece no card do kanban). */
+    interest: text("interest"),
     valueType: dealValueTypeEnum("value_type").notNull().default("single"),
     valueCents: bigint("value_cents", { mode: "number" }).notNull().default(0),
     setupCents: bigint("setup_cents", { mode: "number" }),
@@ -792,7 +794,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 15 as const;
+export const schemaVersion = 16 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

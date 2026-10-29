@@ -27,6 +27,7 @@ type Body = {
   text?: string;
   tags?: string[];
   title?: string;
+  interest?: string | null;
   value?: string;
   sourceId?: string | null;
   description?: string | null;
@@ -54,6 +55,7 @@ export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
     case "update":
       await updateDeal(...a, {
         title: b.title,
+        interest: b.interest,
         ...(b.value !== undefined ? { valueCents: parseMoneyToCents(b.value) } : {}),
         sourceId: b.sourceId === undefined ? undefined : b.sourceId || null,
         description: b.description,

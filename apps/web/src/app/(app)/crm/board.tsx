@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Car,
   ListTodo,
   MessageCircle,
   Plus,
@@ -30,6 +31,7 @@ type Deal = {
   assignedUserName: string | null;
   updatedAt: string;
   createdAt: string;
+  interest: string | null;
   qualification: Qualification;
   tagIds: string[];
 };
@@ -317,6 +319,15 @@ export function Board({
                     <p className="line-clamp-2 text-[15px] font-medium leading-snug">{d.title}</p>
                     <span className="shrink-0 text-[11px] text-ink-3">#{d.number}</span>
                   </div>
+                  {d.interest && (
+                    <p
+                      className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-accent"
+                      data-testid="deal-interest"
+                    >
+                      <Car size={14} className="shrink-0" />
+                      <span className="truncate">{d.interest}</span>
+                    </p>
+                  )}
                   {board.showValues && (
                     <p className="mt-1 text-[14px] font-semibold">{money(d.valueCents)}</p>
                   )}
@@ -402,6 +413,7 @@ type DealDetail = {
   assignedUserId: string | null;
   sourceId: string | null;
   description: string | null;
+  interest: string | null;
   extra: Record<string, string> | null;
   createdAt: string;
   contact: { id: string; name: string | null; phone: string | null; email: string | null } | null;
@@ -450,6 +462,8 @@ function eventText(e: DealDetail["events"][number]) {
       return `Etiquetas: ${((d.tags as string[]) ?? []).join(", ") || "nenhuma"}`;
     case "note":
       return String(d.text ?? "");
+    case "interest":
+      return d.to ? `Carro / interesse: ${d.to}` : "Tirou o carro / interesse";
     case "qualification":
       return d.to === "qualified"
         ? "Marcou como qualificado"
@@ -522,6 +536,7 @@ function DealPanel({
     const ok = await act({
       action: "update",
       title: String(fd.get("title") ?? ""),
+      interest: String(fd.get("interest") ?? ""),
       ...(board.showValues ? { value: String(fd.get("value") ?? "") } : {}),
       sourceId: String(fd.get("sourceId") ?? "") || null,
       description: String(fd.get("description") ?? ""),
@@ -702,10 +717,18 @@ function DealPanel({
             <form
               onSubmit={save}
               className="space-y-3 rounded-[var(--radius-card)] bg-surface p-4"
-              key={d.id + d.title}
+              key={`${d.id}${d.title}${d.interest ?? ""}`}
             >
               <Field label="Título">
                 <Input name="title" defaultValue={d.title} required maxLength={120} />
+              </Field>
+              <Field label="Carro / interesse" hint="Aparece no card do CRM.">
+                <Input
+                  name="interest"
+                  defaultValue={d.interest ?? ""}
+                  maxLength={120}
+                  placeholder="Ex.: HR-V prata 2020"
+                />
               </Field>
               {board.showValues && (
                 <Field label="Valor (R$)">
@@ -909,6 +932,7 @@ function NewDeal({
         phone: fd.get("phone"),
         contactName: fd.get("contactName"),
         title: fd.get("title"),
+        interest: fd.get("interest"),
         value: fd.get("value"),
         stageId: fd.get("stageId"),
         sourceId: fd.get("sourceId"),
@@ -950,7 +974,10 @@ function NewDeal({
           <Input name="contactName" maxLength={80} />
         </Field>
         <Field label="Título (opcional)">
-          <Input name="title" maxLength={120} placeholder="Ex.: Onix 2020" />
+          <Input name="title" maxLength={120} />
+        </Field>
+        <Field label="Carro / interesse (opcional)">
+          <Input name="interest" maxLength={120} placeholder="Ex.: Onix 2020" />
         </Field>
         {board.showValues && (
           <Field label="Valor (R$)">

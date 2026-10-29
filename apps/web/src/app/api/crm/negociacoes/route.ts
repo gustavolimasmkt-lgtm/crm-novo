@@ -11,6 +11,7 @@ export const POST = withOrg(async (req, ctx) => {
     phone: b.phone || undefined,
     contactName: b.contactName || undefined,
     title: b.title || undefined,
+    interest: b.interest || undefined,
     valueCents: parseMoneyToCents(b.value ?? ""),
     stageId: b.stageId || undefined,
     assignedUserId: b.assignedUserId === undefined ? undefined : b.assignedUserId || null,
