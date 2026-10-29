@@ -79,9 +79,9 @@ test("CRM: lead automático, etapas, valor, etiqueta, anotação, arrastar, nova
   await expect(panel.getByText("Cliente quer trocar o Gol 2012")).toBeVisible();
   await expect(panel.getByText("Mudou de Novo lead para Proposta")).toBeVisible();
   await panel.getByRole("button", { name: "Fechar" }).last().click();
-  await expect(
-    page.getByRole("region", { name: "Etapa Proposta" }).getByTestId("deal-interest"),
-  ).toHaveText("HR-V prata 2020");
+  await expect(page.getByRole("region", { name: "Etapa Proposta" }).getByTestId("deal-interest")).toHaveText(
+    "HR-V prata 2020",
+  );
   await expect(page.getByRole("region", { name: "Etapa Proposta" })).toContainText("R$ 64.900,00");
 
   // Arrastar (computador) ou trocar etapa pelo painel (celular) para Ganho

@@ -12,6 +12,8 @@ export type FakeAnthropic = {
   url: string;
   requests: Record<string, unknown>[];
   failNext: number;
+  /** Próximas N chamadas de resumo respondem em texto (sem a ferramenta). */
+  badSummary: number;
   transcriptions: number;
   close(): Promise<void>;
 };
@@ -22,6 +24,7 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
     url: "",
     requests,
     failNext: 0,
+    badSummary: 0,
     transcriptions: 0,
     close: () => new Promise((r) => server.close(() => r())),
   };
@@ -51,6 +54,7 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
       const b = JSON.parse(body || "{}") as {
         messages?: { role: string; content: unknown }[];
         tools?: { name: string }[];
+        tool_choice?: { name?: string };
       };
       requests.push(b as Record<string, unknown>);
       const offered = new Set((b.tools ?? []).map((t) => t.name));
@@ -97,19 +101,21 @@ export async function startFakeAnthropic(opts: { port?: number } = {}): Promise<
       }
       const line = userText ?? "";
       // Resumo do atendimento (JSON).
-      if (String((b as { system?: string }).system ?? "").includes("Responda só com JSON")) {
+      if (b.tool_choice?.name === "registrar_resumo") {
         const conv = String(b.messages?.[0]?.content ?? "");
-        return text(
-          JSON.stringify({
-            resumo:
-              `Cliente conversou sobre carros. ${conv.includes("vendedor") ? "Pediu um vendedor." : ""}`.trim(),
-            interesse: /hrv/i.test(conv) ? "Honda HR-V" : null,
-            temperatura: /vendedor|visita/i.test(conv) ? "quente" : "morno",
-            nota: /vendedor|visita/i.test(conv) ? 8 : 5,
-            proximo_passo: "Ligar hoje e oferecer visita",
-            objecoes: null,
-          }),
-        );
+        if (api.badSummary > 0) {
+          api.badSummary--;
+          return text("Desculpe, não consegui.");
+        }
+        return tool("s1", "registrar_resumo", {
+          resumo:
+            `Cliente conversou sobre carros. ${conv.includes("vendedor") ? "Pediu um vendedor." : ""}`.trim(),
+          interesse: /hrv/i.test(conv) ? "Honda HR-V" : null,
+          temperatura: /vendedor|visita/i.test(conv) ? "quente" : "morno",
+          nota: /vendedor|visita/i.test(conv) ? 8 : 5,
+          proximo_passo: "Ligar hoje e oferecer visita",
+          objecoes: null,
+        });
       }
       // Follow-up: o sistema pede uma retomada.
       if (line.startsWith("[Aviso do sistema")) {

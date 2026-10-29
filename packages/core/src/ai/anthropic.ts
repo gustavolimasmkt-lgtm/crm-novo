@@ -26,6 +26,8 @@ export interface AiClient {
     system: string;
     messages: ChatMessage[];
     tools?: ToolDef[];
+    /** Obriga a usar esta ferramenta (saída estruturada). */
+    toolChoice?: string;
     maxTokens?: number;
   }): Promise<ChatResult>;
 }
@@ -51,7 +53,7 @@ export function createAnthropicClient(opts: {
   const base = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/+$/, "");
   const doFetch = opts.fetchImpl ?? fetch;
   return {
-    async chat({ model, system, messages, tools, maxTokens }) {
+    async chat({ model, system, messages, tools, toolChoice, maxTokens }) {
       let res: Response;
       try {
         res = await doFetch(`${base}/v1/messages`, {
@@ -68,6 +70,7 @@ export function createAnthropicClient(opts: {
             system,
             messages,
             ...(tools?.length ? { tools } : {}),
+            ...(toolChoice ? { tool_choice: { type: "tool", name: toolChoice } } : {}),
           }),
           signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
         });

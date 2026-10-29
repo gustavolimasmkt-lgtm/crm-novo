@@ -343,6 +343,13 @@ describe("resumo do lead", () => {
     expect(req.model).toBe("claude-haiku-5-5");
     expect(req.messages[0]?.content).toContain("Cliente: tem hrv?");
     expect(req.messages[0]?.content).toContain("Loja (IA): Resposta automática: tem hrv?");
+    expect(req).toMatchObject({ tool_choice: { type: "tool", name: "registrar_resumo" } });
+
+    // IA respondeu fora do formato: tenta de novo sozinha; duas vezes seguidas, erro claro.
+    fakeAi.badSummary = 1;
+    expect((await summarizeConversation(db, ai, org.id, c?.id ?? "", admin)).interesse).toBe("Honda HR-V");
+    fakeAi.badSummary = 2;
+    await expect(summarizeConversation(db, ai, org.id, c?.id ?? "", admin)).rejects.toThrow(/resumo válido/);
 
     // Conversa sem dono: o rodízio puxa a pessoa e o aviso leva o resumo.
     await db.update(conversations).set({ assignedUserId: null });
