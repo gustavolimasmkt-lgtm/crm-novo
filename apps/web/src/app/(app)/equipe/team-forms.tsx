@@ -2,7 +2,7 @@
 
 import { Check, Copy } from "lucide-react";
 import { useActionState, useRef, useState } from "react";
-import { inviteAction, updateMemberAction } from "@/app/actions/team";
+import { inviteAction, resetLinkAction, updateMemberAction } from "@/app/actions/team";
 import { Button, Field, Input, Notice, Select } from "@/components/ui";
 
 const ROLES = [
@@ -73,6 +73,7 @@ export function CopyLink({ link }: { link: string }) {
 
 export function MemberControls({ userId, role, active }: { userId: string; role: string; active: boolean }) {
   const [state, action, pending] = useActionState(updateMemberAction, {});
+  const [reset, resetAction, resetting] = useActionState(resetLinkAction, {});
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
@@ -101,6 +102,21 @@ export function MemberControls({ userId, role, active }: { userId: string; role:
           </Button>
         </form>
       </div>
+      {active && (
+        <form action={resetAction}>
+          <input type="hidden" name="userId" value={userId} />
+          <button type="submit" disabled={resetting} className="text-[12px] font-medium text-accent">
+            {resetting ? "Gerando…" : "Gerar link de nova senha"}
+          </button>
+        </form>
+      )}
+      {reset.error && <p className="text-[12px] text-danger">{reset.error}</p>}
+      {reset.data?.link && (
+        <div className="w-full max-w-[420px] space-y-1">
+          <p className="text-[12px] text-ink-2">{reset.message}</p>
+          <CopyLink link={reset.data.link} />
+        </div>
+      )}
       {state.error && <p className="text-[12px] text-danger">{state.error}</p>}
     </div>
   );

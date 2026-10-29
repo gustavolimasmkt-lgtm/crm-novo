@@ -3,6 +3,7 @@
 import {
   createInvitation,
   createOrganization,
+  createResetLinkForMember,
   revokeInvitation,
   setOrganizationStatus,
   updateMember,
@@ -59,6 +60,20 @@ export async function updateMemberAction(_: FormState, fd: FormData): Promise<Fo
   }
   revalidatePath("/equipe");
   return { ok: true };
+}
+
+export async function resetLinkAction(_: FormState, fd: FormData): Promise<FormState> {
+  const ctx = await requireOrg();
+  try {
+    const r = await createResetLinkForMember(getDb(), ctx.actor, ctx.organization.id, str(fd, "userId"));
+    return {
+      ok: true,
+      message: `Link de nova senha (vale ${r.minutes} min, uma vez). Mande só para a pessoa:`,
+      data: { link: r.link },
+    };
+  } catch (e) {
+    return toFormError(e);
+  }
 }
 
 export async function revokeInviteAction(fd: FormData) {

@@ -17,8 +17,8 @@ export function PhoneForm({ phone }: { phone: string | null }) {
       <div>
         <h2 className="text-[17px] font-semibold">Seu WhatsApp para avisos</h2>
         <p className="mt-1 text-[13px] text-ink-2">
-          Recebe aqui: lead novo do rodízio, cliente que a IA passou para você e visita marcada pela IA. Deixe
-          vazio para não receber.
+          Recebe aqui: lead novo do rodízio, cliente que a IA passou para você e visita marcada pela IA.
+          Também é por aqui que chega o link de Esqueci minha senha. Deixe vazio para não receber.
         </p>
       </div>
       <Field label="Telefone com DDD">

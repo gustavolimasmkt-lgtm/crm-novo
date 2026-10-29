@@ -129,3 +129,8 @@ npx playwright test
 - `listDeals` / `exportDealsCsv` / `bulkDeals` (services/deal-list.ts): mesmos filtros (`dealFilterInput`), lidos da URL em `api/crm/lista/filters.ts`.
 - "Parada há" = `lastActivitySql`: maior entre a mudança de etapa e a última mensagem recebida do cliente.
 - Regras de inatividade (`inactivity_rules`): `processInactivity` no timer de 5 min, até 50 movimentos por regra por rodada, via `moveDealSystem` (evento `stage` com `via`, que dispara fluxos de etapa).
+
+## Senha e avisos no navegador
+
+- Esqueci minha senha (`services/password.ts`): link por WhatsApp (`users.phone`) usando uma conexão aberta de uma empresa da pessoa; tabela `password_resets` guarda só o hash. Páginas `/esqueci-senha` e `/redefinir-senha?t=`.
+- Aviso no navegador: `storeParsedMessage` emite o evento `inbound` (responsável, nome, prévia); `/api/eventos` só repassa para quem pode ver a conversa; `components/notifier.tsx` toca o som (WebAudio), mostra a notificação e conta no título.

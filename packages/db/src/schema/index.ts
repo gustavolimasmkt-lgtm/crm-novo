@@ -96,6 +96,26 @@ export const sessions = pgTable(
   (t) => [uniqueIndex("sessions_token_uq").on(t.tokenHash), index("sessions_user_idx").on(t.userId)],
 );
 
+/** Links de nova senha (WhatsApp ou gerado pelo administrador). Guarda só o hash do token. */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    via: text("via").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("password_resets_token_uq").on(t.tokenHash),
+    index("password_resets_user_idx").on(t.userId),
+  ],
+);
+
 export const invitations = pgTable(
   "invitations",
   {
@@ -794,7 +814,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 17 as const;
+export const schemaVersion = 18 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

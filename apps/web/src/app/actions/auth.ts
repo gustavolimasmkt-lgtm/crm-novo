@@ -6,11 +6,14 @@ import {
   login,
   logout,
   passwordProblem,
+  requestPasswordReset,
+  resetPassword,
   switchOrganization,
 } from "@crm/core";
 import { getDb } from "@crm/db";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getEvolution } from "@/lib/evolution";
 import { type FormState, str, toFormError } from "@/lib/form";
 import {
   clearSessionCookie,
@@ -80,4 +83,32 @@ export async function changePasswordAction(_: FormState, fd: FormData): Promise<
   } catch (e) {
     return toFormError(e);
   }
+}
+
+export async function forgotPasswordAction(_: FormState, fd: FormData): Promise<FormState> {
+  const email = str(fd, "email");
+  try {
+    await requestPasswordReset(getDb(), getEvolution(), email);
+  } catch (e) {
+    // Mesmo com erro, a resposta não muda: não revela se o e-mail existe.
+    console.error("[senha]", (e as Error).message);
+  }
+  return {
+    ok: true,
+    message:
+      "Se esse e-mail tiver conta e um WhatsApp cadastrado em Conta, mandamos o link agora. Ele vale por 30 minutos.",
+  };
+}
+
+export async function resetPasswordAction(_: FormState, fd: FormData): Promise<FormState> {
+  const next = str(fd, "password");
+  if (next !== str(fd, "confirm")) return { error: "As senhas não são iguais." };
+  try {
+    const { email } = await resetPassword(getDb(), str(fd, "token"), next);
+    const session = await login(getDb(), { email, password: next, ...(await requestMeta()) });
+    await setSessionCookie(session.token, session.expiresAt);
+  } catch (e) {
+    return toFormError(e);
+  }
+  redirect("/");
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Car, Download, SlidersHorizontal, ThumbsDown, ThumbsUp } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DISQUALIFY_REASONS } from "@/components/qualify";
 import { Avatar, Button, cx, Input, Notice, Select } from "@/components/ui";
 
@@ -129,10 +129,14 @@ export function DealList({
     setAllMatching(false);
   }, [query]);
 
+  const lastReq = useRef(0);
   const load = useCallback(async () => {
+    // Resposta atrasada de um filtro antigo não pode sobrescrever a do filtro atual.
+    const reqId = ++lastReq.current;
     try {
       const r = await fetch(`/api/crm/lista?${query}&pagina=${page}`, { cache: "no-store" });
       const j = await r.json();
+      if (reqId !== lastReq.current) return;
       if (!r.ok) throw new Error(j.error ?? "Erro ao carregar.");
       setData(j);
       setError(null);

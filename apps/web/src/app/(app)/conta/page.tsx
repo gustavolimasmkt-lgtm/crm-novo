@@ -2,6 +2,7 @@ import { getDb, users } from "@crm/db";
 import { eq } from "drizzle-orm";
 import { PageHeader } from "@/components/ui";
 import { requireOrg } from "@/lib/session";
+import { NoticePrefsForm } from "./notice-prefs";
 import { PasswordForm } from "./password-form";
 import { PhoneForm } from "./phone-form";
 
@@ -16,6 +17,7 @@ export default async function AccountPage() {
       <PageHeader title="Conta" subtitle={ctx.user.email} />
       <div className="max-w-[440px] space-y-6">
         <PhoneForm phone={me?.phone ?? null} />
+        <NoticePrefsForm />
         <PasswordForm />
       </div>
     </>

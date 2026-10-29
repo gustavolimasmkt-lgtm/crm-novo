@@ -114,13 +114,16 @@ export function Board({
   const dragging = useRef<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
 
+  const boardReq = useRef(0);
   const load = useCallback(async () => {
     const p = new URLSearchParams({ funil: pipelineId });
     if (q.trim()) p.set("q", q.trim());
     if (owner) p.set("responsavel", owner);
     if (tagId) p.set("etiqueta", tagId);
     try {
-      setBoard(await api<BoardData>(`/api/crm/board?${p}`));
+      const reqId = ++boardReq.current;
+      const b = await api<BoardData>(`/api/crm/board?${p}`);
+      if (reqId === boardReq.current) setBoard(b);
     } catch (e) {
       setError((e as Error).message);
     }

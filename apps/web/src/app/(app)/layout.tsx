@@ -1,5 +1,6 @@
 import { can, listMyOrganizations } from "@crm/core";
 import { getDb } from "@crm/db";
+import { Notifier } from "@/components/notifier";
 import { Shell } from "@/components/shell";
 import { requireOrg } from "@/lib/session";
 
@@ -17,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       canManageConnections={can(ctx.actor, "connections.manage")}
       canConfigure={can(ctx.actor, "settings.manage")}
     >
+      <Notifier />
       {children}
     </Shell>
   );

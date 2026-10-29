@@ -211,6 +211,20 @@ export async function storeParsedMessage(db: Database, c: Connection, p: ParsedM
     // Lead novo já avisado pelo rodízio; com a IA respondendo, o aviso vem quando ela passar para humano.
     if (!distributed && !aiWillAnswer)
       await alertNewMessage(db, c.organizationId, conversation.id, c.id, contact, previewOf(p.type, p.body));
+    // Aviso no navegador (som e notificação) só para mensagem recente, não para histórico sincronizado.
+    if (Date.now() - p.sentAt.getTime() < 5 * 60_000) {
+      const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, conversation.id) });
+      await notifyOrg(db, {
+        o: c.organizationId,
+        t: "inbound",
+        c: conversation.id,
+        u: conv?.assignedUserId ?? null,
+        n: (contact.name ?? contact.pushName ?? contact.phone ?? "Cliente").slice(0, 60),
+        p: previewOf(p.type, p.body).slice(0, 100),
+        ai: aiWillAnswer,
+        lead: !!newDealId,
+      });
+    }
   }
   await notifyOrg(db, { o: c.organizationId, t: "message", c: conversation.id });
   return { conversationId: conversation.id, duplicate: false };

@@ -4,7 +4,7 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 
 | ID | Funcionalidade | Fase | Status | Evidência |
 | --- | --- | --- | --- | --- |
-| F01 | Login, sessão, recuperação de senha | 0 | Parcial | Login, sessão de 30 dias, troca de senha e bloqueio por tentativas: testes unitários, integração e E2E. Falta recuperação de senha por e-mail (depende do Resend). |
+| F01 | Login, sessão, recuperação de senha | 0 | Concluído | Login, sessão de 30 dias, troca de senha e bloqueio por tentativas. Esqueci minha senha: link pelo WhatsApp cadastrado em Conta (mesma resposta exista ou não a conta, 3 pedidos por hora, vale 30 min e uma vez, guarda só o hash, derruba as sessões). Administrador gera link de nova senha em Equipe (não vale para master nem para quem está em outra empresa). E-mail (Resend) não usado. Integração + E2E. |
 | F02 | Multiempresa, painel Master e troca de conta | 0 | Concluído | Integração + E2E (criar empresa, convite, troca de empresa, suspensão). |
 | F03 | Papéis e permissões | 0 | Concluído (proposta) | Unitário por papel + E2E vendedor sem acesso à Equipe. Matriz aguardando ajuste. |
 | F04 | Departamentos | 0 | Pendente | Tabela criada; telas entram junto com Conversas (Fase 1). |
@@ -54,7 +54,7 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 | F48 | Rastreamento: pixel, links, atribuição | 2 | Parcial | Atribuição de clique para WhatsApp: o anúncio de origem (id, título, link, Facebook/Instagram, ctwa_clid) vem na primeira mensagem e fica na negociação, com origem Meta Ads. Pixel de site e links rastreáveis: pendentes. Integração + E2E. |
 | F49 | Google Agenda | 2 | Pendente |  |
 | F50 | Relatórios por WhatsApp e PDF | 2 | Pendente |  |
-| F51 | Notificações push e sons | 2 | Pendente |  |
+| F51 | Notificações push e sons | 2 | Concluído (parcial) | Mensagem de cliente avisa no navegador: som, notificação do sistema com a aba em segundo plano e contador no título. Só para quem pode ver a conversa (dele, sem dono, gestor vê todas); não avisa se já está na conversa ou se a IA vai responder (lead novo sempre avisa). Preferências por navegador em Conta e convite para ativar no topo (computador). Push com o navegador fechado (service worker): pendente. E2E. |
 | F52 | Instagram: Direct e comentários | 3 | Pendente |  |
 | F53 | API Oficial do WhatsApp | 3 | Pendente |  |
 | F54 | Disparos: campanhas, listas, histórico | 3 | Pendente |  |
