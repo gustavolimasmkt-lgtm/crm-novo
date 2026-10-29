@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function CrmPage({
   searchParams,
 }: {
-  searchParams: Promise<{ funil?: string; n?: string }>;
+  searchParams: Promise<{ funil?: string; n?: string; ver?: string }>;
 }) {
   const ctx = await requireOrg();
   const db = getDb();
@@ -31,6 +31,8 @@ export default async function CrmPage({
       canReassign={can(ctx.actor, "deals.reassign")}
       canDelete={can(ctx.actor, "deals.delete")}
       canSettings={can(ctx.actor, "settings.manage")}
+      canExport={can(ctx.actor, "reports.view")}
+      initialView={sp.ver === "lista" ? "lista" : "quadro"}
     />
   );
 }

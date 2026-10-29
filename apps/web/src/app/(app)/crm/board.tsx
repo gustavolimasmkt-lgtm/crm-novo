@@ -18,6 +18,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { type Qualification, QualifyButtons, type QualifyMeta } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { formatPhone } from "@/lib/format";
+import { DealList } from "./deal-list";
 
 type Deal = {
   id: string;
@@ -84,6 +85,8 @@ export function Board({
   canReassign,
   canDelete,
   canSettings,
+  canExport,
+  initialView,
 }: {
   initial: BoardData;
   initialOpen: string | null;
@@ -94,6 +97,8 @@ export function Board({
   canReassign: boolean;
   canDelete: boolean;
   canSettings: boolean;
+  canExport: boolean;
+  initialView: "quadro" | "lista";
 }) {
   const [board, setBoard] = useState(initial);
   const [pipelineId, setPipelineId] = useState(initial.pipeline.id);
@@ -101,6 +106,8 @@ export function Board({
   const [owner, setOwner] = useState("");
   const [tagId, setTagId] = useState("");
   const [open, setOpen] = useState<string | null>(initialOpen);
+  const [view, setView] = useState(initialView);
+  const [tick, setTick] = useState(0);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,15 +136,20 @@ export function Board({
     url.searchParams.set("funil", pipelineId);
     if (open) url.searchParams.set("n", open);
     else url.searchParams.delete("n");
+    if (view === "lista") url.searchParams.set("ver", "lista");
+    else url.searchParams.delete("ver");
     window.history.replaceState(null, "", url);
-  }, [pipelineId, open]);
+  }, [pipelineId, open, view]);
 
   useEffect(() => {
     const es = new EventSource("/api/eventos");
     let t: ReturnType<typeof setTimeout> | null = null;
     es.onmessage = () => {
       if (t) clearTimeout(t);
-      t = setTimeout(load, 400);
+      t = setTimeout(() => {
+        load();
+        setTick((n) => n + 1);
+      }, 400);
     };
     return () => {
       es.close();
@@ -187,6 +199,24 @@ export function Board({
     <div className="md:-mx-4 md:-mt-4">
       <header className="mb-4 flex flex-wrap items-center gap-2">
         <h1 className="large-title mr-2">CRM</h1>
+        <div
+          className="flex rounded-full bg-fill p-0.5 text-[13px] font-medium"
+          role="tablist"
+          aria-label="Visão"
+        >
+          {(["quadro", "lista"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+              className={cx("rounded-full px-3 py-1", view === v ? "bg-surface shadow-sm" : "text-ink-2")}
+            >
+              {v === "quadro" ? "Quadro" : "Lista"}
+            </button>
+          ))}
+        </div>
         <Select
           aria-label="Funil"
           value={pipelineId}
@@ -270,105 +300,132 @@ export function Board({
         </div>
       )}
 
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0" data-testid="board">
-        {board.stages.map((s) => (
-          <section
-            key={s.id}
-            aria-label={`Etapa ${s.name}`}
-            data-testid="stage"
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOver(s.id);
-            }}
-            onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
-            onDrop={(e) => {
-              e.preventDefault();
-              setOver(null);
-              const id = dragging.current ?? e.dataTransfer.getData("text/plain");
-              if (id) move(id, s.id);
-            }}
-            className={cx(
-              "flex max-h-[calc(100dvh-15rem)] w-[280px] shrink-0 flex-col rounded-[var(--radius-card)] bg-fill/60 transition-colors md:max-h-[calc(100dvh-13rem)]",
-              over === s.id && "bg-accent-soft",
-            )}
-          >
-            <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
-              <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s.name}</h2>
-              <span className="text-[13px] text-ink-3">{s.count}</span>
-            </div>
-            {board.showValues && <p className="px-3 pb-2 text-[12px] text-ink-2">{money(s.totalCents)}</p>}
-            <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-              {s.deals.map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  draggable
-                  data-testid="deal-card"
-                  onDragStart={(e) => {
-                    dragging.current = d.id;
-                    e.dataTransfer.setData("text/plain", d.id);
-                  }}
-                  onDragEnd={() => {
-                    dragging.current = null;
-                  }}
-                  onClick={() => setOpen(d.id)}
-                  className="block w-full rounded-xl bg-surface p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="line-clamp-2 text-[15px] font-medium leading-snug">{d.title}</p>
-                    <span className="shrink-0 text-[11px] text-ink-3">#{d.number}</span>
-                  </div>
-                  {d.interest && (
-                    <p
-                      className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-accent"
-                      data-testid="deal-interest"
-                    >
-                      <Car size={14} className="shrink-0" />
-                      <span className="truncate">{d.interest}</span>
-                    </p>
-                  )}
-                  {board.showValues && (
-                    <p className="mt-1 text-[14px] font-semibold">{money(d.valueCents)}</p>
-                  )}
-                  {d.tagIds.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {d.tagIds.map((t) =>
-                        tagById[t] ? (
-                          <span
-                            key={t}
-                            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-                            style={{ background: tagById[t].color }}
-                          >
-                            {tagById[t].name}
-                          </span>
-                        ) : null,
-                      )}
+      {view === "lista" ? (
+        <DealList
+          pipelineId={pipelineId}
+          q={q}
+          owner={owner}
+          tagId={tagId}
+          stages={board.stages.map((s) => ({ id: s.id, name: s.name }))}
+          sources={sources}
+          tags={tags}
+          people={people}
+          canReassign={canReassign}
+          canDelete={canDelete}
+          canExport={canExport}
+          refreshKey={tick}
+          onOpen={setOpen}
+          onChanged={load}
+        />
+      ) : (
+        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0" data-testid="board">
+          {board.stages.map((s) => (
+            <section
+              key={s.id}
+              aria-label={`Etapa ${s.name}`}
+              data-testid="stage"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOver(s.id);
+              }}
+              onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setOver(null);
+                const id = dragging.current ?? e.dataTransfer.getData("text/plain");
+                if (id) move(id, s.id);
+              }}
+              className={cx(
+                "flex max-h-[calc(100dvh-15rem)] w-[280px] shrink-0 flex-col rounded-[var(--radius-card)] bg-fill/60 transition-colors md:max-h-[calc(100dvh-13rem)]",
+                over === s.id && "bg-accent-soft",
+              )}
+            >
+              <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+                <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s.name}</h2>
+                <span className="text-[13px] text-ink-3">{s.count}</span>
+              </div>
+              {board.showValues && <p className="px-3 pb-2 text-[12px] text-ink-2">{money(s.totalCents)}</p>}
+              <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+                {s.deals.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    draggable
+                    data-testid="deal-card"
+                    onDragStart={(e) => {
+                      dragging.current = d.id;
+                      e.dataTransfer.setData("text/plain", d.id);
+                    }}
+                    onDragEnd={() => {
+                      dragging.current = null;
+                    }}
+                    onClick={() => setOpen(d.id)}
+                    className="block w-full rounded-xl bg-surface p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 text-[15px] font-medium leading-snug">{d.title}</p>
+                      <span className="shrink-0 text-[11px] text-ink-3">#{d.number}</span>
                     </div>
-                  )}
-                  <div className="mt-2 flex items-center gap-2 text-[12px] text-ink-3">
-                    {d.assignedUserName ? <Avatar name={d.assignedUserName} size={20} /> : null}
-                    <span className="min-w-0 flex-1 truncate">{d.assignedUserName ?? "Sem responsável"}</span>
-                    {d.qualification && (
-                      <span
-                        className={cx(
-                          "inline-flex items-center",
-                          d.qualification === "qualified" ? "text-ok" : "text-danger",
-                        )}
-                        title={d.qualification === "qualified" ? "Qualificado" : "Desqualificado"}
+                    {d.interest && (
+                      <p
+                        className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-accent"
+                        data-testid="deal-interest"
                       >
-                        {d.qualification === "qualified" ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
-                      </span>
+                        <Car size={14} className="shrink-0" />
+                        <span className="truncate">{d.interest}</span>
+                      </p>
                     )}
-                    <span>{daysSince(d.updatedAt)}</span>
-                  </div>
-                </button>
-              ))}
-              {s.deals.length === 0 && <p className="px-2 py-6 text-center text-[13px] text-ink-3">Vazio</p>}
-            </div>
-          </section>
-        ))}
-      </div>
+                    {board.showValues && (
+                      <p className="mt-1 text-[14px] font-semibold">{money(d.valueCents)}</p>
+                    )}
+                    {d.tagIds.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {d.tagIds.map((t) =>
+                          tagById[t] ? (
+                            <span
+                              key={t}
+                              className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                              style={{ background: tagById[t].color }}
+                            >
+                              {tagById[t].name}
+                            </span>
+                          ) : null,
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-2 flex items-center gap-2 text-[12px] text-ink-3">
+                      {d.assignedUserName ? <Avatar name={d.assignedUserName} size={20} /> : null}
+                      <span className="min-w-0 flex-1 truncate">
+                        {d.assignedUserName ?? "Sem responsável"}
+                      </span>
+                      {d.qualification && (
+                        <span
+                          className={cx(
+                            "inline-flex items-center",
+                            d.qualification === "qualified" ? "text-ok" : "text-danger",
+                          )}
+                          title={d.qualification === "qualified" ? "Qualificado" : "Desqualificado"}
+                        >
+                          {d.qualification === "qualified" ? (
+                            <ThumbsUp size={13} />
+                          ) : (
+                            <ThumbsDown size={13} />
+                          )}
+                        </span>
+                      )}
+                      <span>{daysSince(d.updatedAt)}</span>
+                    </div>
+                  </button>
+                ))}
+                {s.deals.length === 0 && (
+                  <p className="px-2 py-6 text-center text-[13px] text-ink-3">Vazio</p>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
 
       {open && (
         <DealPanel
@@ -381,7 +438,10 @@ export function Board({
           canReassign={canReassign}
           canDelete={canDelete}
           onClose={() => setOpen(null)}
-          onChanged={load}
+          onChanged={() => {
+            load();
+            setTick((n) => n + 1);
+          }}
         />
       )}
       {creating && (
@@ -451,7 +511,7 @@ function eventText(e: DealDetail["events"][number]) {
     case "imported":
       return `Importada (${d.stage})`;
     case "stage":
-      return `Mudou de ${d.from ?? "?"} para ${d.to}`;
+      return `Mudou de ${d.from ?? "?"} para ${d.to}${d.via ? ` (${d.via === "IA" ? "pela IA" : `automático: ${d.via}`})` : ""}`;
     case "assigned":
       return d.name ? `Responsável: ${d.name}` : d.userId ? "Responsável alterado" : "Ficou sem responsável";
     case "value":
@@ -459,6 +519,7 @@ function eventText(e: DealDetail["events"][number]) {
     case "title":
       return `Título: ${d.to}`;
     case "tags":
+      if (d.tag) return `Etiqueta adicionada: ${d.tag}`;
       return `Etiquetas: ${((d.tags as string[]) ?? []).join(", ") || "nenhuma"}`;
     case "note":
       return String(d.text ?? "");

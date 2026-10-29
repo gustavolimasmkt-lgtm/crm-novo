@@ -123,3 +123,9 @@ npx playwright test
 - `processFlows` roda no timer de 20 s; mensagens usam `reserveAutomatedSend` (anti-bloqueio) e a janela do follow-up.
 - Mídia dos passos em `flow_media` (bytea, até 16 MB): `POST /api/fluxos/midia` e `GET /api/fluxos/midia/[id]`.
 - Execução manual (`trigger_key` `manual:`): `/api/fluxos/[id]/iniciar` chama `processFlows({ runId })` na hora; envia até 10 passos seguidos com 1,2 s entre eles, `automation = 'flow_manual'` (fora do limite diário).
+
+## Lista do CRM e inatividade
+
+- `listDeals` / `exportDealsCsv` / `bulkDeals` (services/deal-list.ts): mesmos filtros (`dealFilterInput`), lidos da URL em `api/crm/lista/filters.ts`.
+- "Parada há" = `lastActivitySql`: maior entre a mudança de etapa e a última mensagem recebida do cliente.
+- Regras de inatividade (`inactivity_rules`): `processInactivity` no timer de 5 min, até 50 movimentos por regra por rodada, via `moveDealSystem` (evento `stage` com `via`, que dispara fluxos de etapa).

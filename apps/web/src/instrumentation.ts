@@ -2,6 +2,7 @@
  * Ao subir o servidor:
  * - reprocessa eventos da Evolution que falharam (a cada 30 s);
  * - Meta: API de Conversões e nomes dos anúncios (a cada 60 s);
+ * - CRM: move negociações paradas pelas regras de inatividade (a cada 5 min);
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
  * - lembra os clientes das visitas, avisa tarefas, envia mensagens agendadas, campanhas e fluxos (a cada 20 s);
  * - follow-up: a IA retoma clientes que pararam de responder (a cada 20 s, respeitando o anti-bloqueio);
@@ -33,6 +34,21 @@ export async function register() {
       metaRunning = false;
     }
   }, 60_000).unref?.();
+
+  // CRM: move negociações paradas conforme as regras de inatividade (a cada 5 min).
+  let idleRunning = false;
+  setInterval(async () => {
+    if (idleRunning) return;
+    idleRunning = true;
+    try {
+      const n = await core.processInactivity(getDb());
+      if (n) console.log(`[inatividade] ${n} negociação(ões) movida(s)`);
+    } catch (e) {
+      console.error("[inatividade]", e);
+    } finally {
+      idleRunning = false;
+    }
+  }, 300_000).unref?.();
 
   const { EVOLUTION_API_URL: evoUrl, EVOLUTION_API_KEY: evoKey } = process.env;
   if (evoUrl && evoKey) {

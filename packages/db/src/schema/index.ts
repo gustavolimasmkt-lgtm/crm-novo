@@ -794,7 +794,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 16 as const;
+export const schemaVersion = 17 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -968,6 +968,29 @@ export type FlowStep =
       fileName: string;
       caption: string;
     };
+/** Move sozinho a negociação parada há X dias (sem mensagem do cliente nem mudança de etapa). */
+export const inactivityRules = pgTable(
+  "inactivity_rules",
+  {
+    id: id(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "cascade" }),
+    /** Etapas de origem; vazio = qualquer etapa aberta do funil. */
+    fromStageIds: jsonb("from_stage_ids").$type<string[]>().notNull().default([]),
+    days: integer("days").notNull(),
+    toStageId: uuid("to_stage_id")
+      .notNull()
+      .references(() => pipelineStages.id, { onDelete: "cascade" }),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index("inactivity_rules_org_idx").on(t.organizationId)],
+);
+
 export const flowTriggerEnum = pgEnum("flow_trigger", [
   "manual",
   "lead_created",

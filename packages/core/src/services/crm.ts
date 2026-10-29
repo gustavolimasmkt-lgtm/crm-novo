@@ -78,6 +78,11 @@ function requireSettings(actor: Actor) {
     throw new AppError("forbidden", "Só administradores e gestores configuram o CRM.");
 }
 
+/** Filtro do que a pessoa pode ver (vendedor: as dele e as sem dono). */
+export function dealVisibility(actor: ActorU): SQL | undefined {
+  return visibility(actor);
+}
+
 function visibility(actor: ActorU): SQL | undefined {
   if (can(actor, "deals.view_all")) return undefined;
   return or(eq(deals.assignedUserId, actor.userId), isNull(deals.assignedUserId));
@@ -809,6 +814,58 @@ export async function deleteDeal(db: Database, actor: ActorU, organizationId: st
     data: { number: d.number, title: d.title },
   });
   await notifyOrg(db, { o: organizationId, t: "conversation" });
+}
+
+/** Põe uma etiqueta sem tirar as outras. */
+export async function addDealTag(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  id: string,
+  name: string,
+) {
+  const d = await loadDeal(db, actor, organizationId, id);
+  const clean = name.trim().slice(0, 40);
+  if (!clean) throw new AppError("validation", "Informe a etiqueta.");
+  const [tagId] = await tagIdsByName(db, organizationId, [clean], can(actor, "settings.manage"));
+  if (!tagId) throw new AppError("validation", "Etiqueta não existe. Peça a um gestor para criar.");
+  const added = await db.insert(dealTags).values({ dealId: d.id, tagId }).onConflictDoNothing().returning();
+  if (added.length)
+    await event(db, organizationId, d.id, actor.userId, "tags", { added: [tagId], tag: clean });
+}
+
+/** Move sem pessoa (automação). Registra o evento com a origem, o que dispara fluxos de etapa. */
+export async function moveDealSystem(
+  db: Database,
+  organizationId: string,
+  dealId: string,
+  stageId: string,
+  via: string,
+) {
+  const to = await stageInOrg(db, organizationId, stageId);
+  const d = await db.query.deals.findFirst({
+    where: and(eq(deals.id, dealId), eq(deals.organizationId, organizationId)),
+  });
+  if (!d || d.stageId === to.id) return false;
+  const from = await db.query.pipelineStages.findFirst({ where: eq(pipelineStages.id, d.stageId) });
+  await db
+    .update(deals)
+    .set({
+      stageId: to.id,
+      pipelineId: to.pipelineId,
+      stageChangedAt: new Date(),
+      closedAt: CLOSED_KINDS.includes(to.kind) ? new Date() : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(deals.id, d.id));
+  await event(db, organizationId, d.id, null, "stage", {
+    from: from?.name ?? null,
+    to: to.name,
+    toId: to.id,
+    kind: to.kind,
+    via,
+  });
+  return true;
 }
 
 /** Negociação aberta mais recente do contato (para mostrar na conversa). */
