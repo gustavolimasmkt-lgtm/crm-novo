@@ -39,6 +39,7 @@ import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/compo
 import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime, toBrInput } from "@/lib/format";
 import { subscribeLive } from "@/lib/live";
 import { mmss, useVoiceRecorder } from "@/lib/voice";
+import { DealPanel } from "../crm/board";
 
 type Filter = "open" | "unread" | "mine" | "closed" | "all";
 type Conv = {
@@ -143,6 +144,7 @@ type DealChip = {
   number: number;
   stageName: string;
   stageColor: string;
+  pipelineId: string;
   pipelineName: string;
   qualification: Qualification;
   qualificationReason: string | null;
@@ -194,6 +196,7 @@ export function Inbox({
   aiEnabled = false,
   flows = [],
   pipelines = [],
+  dealCtx,
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -208,6 +211,14 @@ export function Inbox({
   aiEnabled?: boolean;
   flows?: { id: string; name: string; active?: boolean }[];
   pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[];
+  /** Para abrir a negociação sem sair da conversa. */
+  dealCtx?: {
+    sources: { id: string; name: string }[];
+    tags: { id: string; name: string; color: string; kind: "organize" | "dispatch" }[];
+    canReassign: boolean;
+    canDelete: boolean;
+    showValues: boolean;
+  };
 }) {
   const extras = useMemo(
     () => ({ quickReplies, sttEnabled, aiEnabled, flows }),
@@ -216,6 +227,7 @@ export function Inbox({
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
   const [stageId, setStageId] = useState("");
+  const [dealOpen, setDealOpen] = useState<string | null>(null);
   const [list, setList] = useState<Conv[]>(initial);
   const [selected, setSelected] = useState<string | null>(initialSelected);
   const [thread, setThread] = useState<ThreadData | null>(null);
@@ -477,6 +489,7 @@ export function Inbox({
                 people={people}
                 canViewAll={canViewAll}
                 agentActive={agentActive}
+                onOpenDeal={dealCtx ? setDealOpen : undefined}
                 onBack={() => setSelected(null)}
                 onChanged={() => {
                   loadThread(selected);
@@ -487,6 +500,28 @@ export function Inbox({
           </section>
         </div>
 
+        {dealOpen && dealCtx && (
+          <DealPanel
+            id={dealOpen}
+            board={{
+              stages:
+                pipelines.find((p) => p.id === thread?.deal?.pipelineId)?.stages ??
+                pipelines.flatMap((p) => p.stages),
+              showValues: dealCtx.showValues,
+            }}
+            people={people}
+            sources={dealCtx.sources}
+            tags={dealCtx.tags}
+            me={me.id}
+            canReassign={dealCtx.canReassign}
+            canDelete={dealCtx.canDelete}
+            onClose={() => setDealOpen(null)}
+            onChanged={() => {
+              if (selected) loadThread(selected);
+              loadList();
+            }}
+          />
+        )}
         {showNew && (
           <NewConversation
             connections={connections}
@@ -512,9 +547,11 @@ function Thread({
   people,
   canViewAll,
   agentActive,
+  onOpenDeal,
   onBack,
   onChanged,
 }: {
+  onOpenDeal?: (dealId: string) => void;
   id: string;
   thread: ThreadData | null;
   error: string | null;
@@ -587,8 +624,14 @@ function Thread({
               {thread?.deal && (
                 <Link
                   href={`/crm?n=${thread.deal.id}`}
+                  onClick={(e) => {
+                    if (!onOpenDeal || !thread.deal) return;
+                    e.preventDefault();
+                    onOpenDeal(thread.deal.id);
+                  }}
                   className="mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12px] font-medium text-accent"
                   data-testid="deal-chip"
+                  title="Abrir a negociação"
                 >
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"

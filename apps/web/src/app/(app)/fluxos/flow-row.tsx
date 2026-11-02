@@ -12,7 +12,7 @@ export function FlowRow({
   stages,
   dailyLimit,
 }: {
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; kind: "organize" | "dispatch" }[];
   stages: { id: string; name: string }[];
   dailyLimit: number;
   flow: {

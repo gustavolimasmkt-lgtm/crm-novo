@@ -26,7 +26,15 @@ import {
 import { z } from "zod";
 import { type Actor, can } from "../auth/permissions.js";
 import { toCsv } from "../csv.js";
-import { addDealTag, assignDeal, dealVisibility, deleteDeal, moveDeal, setDealQualification } from "./crm.js";
+import {
+  addDealTag,
+  assignDeal,
+  dealVisibility,
+  deleteDeal,
+  moveDeal,
+  removeDealTag,
+  setDealQualification,
+} from "./crm.js";
 import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
 
@@ -265,6 +273,14 @@ export const bulkActionInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("assign"), userId: z.union([uuid, z.null()]) }),
   z.object({ type: z.literal("tag"), name: z.string().trim().min(1, "Informe a etiqueta.").max(40) }),
   z.object({
+    type: z.literal("list_add"),
+    name: z.string().trim().min(1, "Informe a lista de disparo.").max(40),
+  }),
+  z.object({
+    type: z.literal("list_remove"),
+    name: z.string().trim().min(1, "Informe a lista de disparo.").max(40),
+  }),
+  z.object({
     type: z.literal("qualify"),
     value: z.enum(["qualified", "disqualified"]).nullable(),
     reason: z.string().max(200).nullable().optional(),
@@ -326,6 +342,12 @@ export async function bulkDeals(
           break;
         case "tag":
           await addDealTag(db, actor, organizationId, id, action.name);
+          break;
+        case "list_add":
+          await addDealTag(db, actor, organizationId, id, action.name, "dispatch");
+          break;
+        case "list_remove":
+          await removeDealTag(db, actor, organizationId, id, action.name);
           break;
         case "qualify":
           await setDealQualification(db, actor, organizationId, id, action.value, action.reason ?? null);

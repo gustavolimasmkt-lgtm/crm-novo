@@ -72,7 +72,7 @@ test("CRM: lead automático, etapas, valor, etiqueta, anotação, arrastar, nova
   await panel.getByRole("button", { name: "Salvar" }).click();
   await expect(panel.getByText("Salvo.")).toBeVisible();
   await panel.getByLabel("Adicionar etiqueta").fill("Lead quente");
-  await panel.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await panel.getByTestId("etiquetas").getByRole("button", { name: "Adicionar", exact: true }).click();
   await expect(panel.getByText("Lead quente").first()).toBeVisible();
   await panel.getByLabel("Anotação").fill("Cliente quer trocar o Gol 2012");
   await panel.getByRole("button", { name: "Anotar" }).click();

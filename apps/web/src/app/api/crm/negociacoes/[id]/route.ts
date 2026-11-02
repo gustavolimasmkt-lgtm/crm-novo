@@ -26,6 +26,7 @@ type Body = {
   userId?: string | null;
   text?: string;
   tags?: string[];
+  kind?: string;
   title?: string;
   interest?: string | null;
   value?: string;
@@ -50,7 +51,11 @@ export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
       await addDealNote(...a, String(b.text ?? ""));
       break;
     case "tags":
-      await setDealTags(...a, Array.isArray(b.tags) ? b.tags.map(String) : []);
+      await setDealTags(
+        ...a,
+        Array.isArray(b.tags) ? b.tags.map(String) : [],
+        b.kind === "dispatch" ? "dispatch" : "organize",
+      );
       break;
     case "update":
       await updateDeal(...a, {

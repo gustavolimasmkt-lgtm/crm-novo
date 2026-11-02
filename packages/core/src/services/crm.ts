@@ -518,7 +518,7 @@ export async function getDeal(db: Database, actor: ActorU, organizationId: strin
     db.query.contacts.findFirst({ where: eq(contacts.id, d.contactId) }),
     db.query.pipelineStages.findFirst({ where: eq(pipelineStages.id, d.stageId) }),
     db
-      .select({ id: tags.id, name: tags.name, color: tags.color })
+      .select({ id: tags.id, name: tags.name, color: tags.color, kind: tags.kind })
       .from(dealTags)
       .innerJoin(tags, eq(tags.id, dealTags.tagId))
       .where(eq(dealTags.dealId, d.id)),
@@ -766,35 +766,66 @@ export async function setDealQualification(
 }
 
 /** Aplica etiquetas pelo nome (cria as que não existem). */
+export type TagKind = "organize" | "dispatch";
+const KIND_LABEL: Record<TagKind, string> = { organize: "etiqueta", dispatch: "lista de disparo" };
+
+/**
+ * Troca as etiquetas (ou as listas de disparo) da negociação pelo nome. Só mexe no tipo pedido:
+ * salvar as etiquetas não tira as listas de disparo e vice-versa.
+ */
 export async function setDealTags(
   db: Database,
   actor: ActorU,
   organizationId: string,
   id: string,
   names: string[],
+  kind: TagKind = "organize",
 ) {
   const d = await loadDeal(db, actor, organizationId, id);
   const clean = [...new Set(names.map((n) => n.trim().slice(0, 40)).filter(Boolean))];
-  const ids = await tagIdsByName(db, organizationId, clean, can(actor, "settings.manage"));
-  const before = await db.select({ id: dealTags.tagId }).from(dealTags).where(eq(dealTags.dealId, d.id));
+  const ids = await tagIdsByName(db, organizationId, clean, can(actor, "settings.manage"), kind);
+  const before = await db
+    .select({ id: dealTags.tagId })
+    .from(dealTags)
+    .innerJoin(tags, eq(tags.id, dealTags.tagId))
+    .where(and(eq(dealTags.dealId, d.id), eq(tags.kind, kind)));
   const added = ids.filter((t) => !before.some((b) => b.id === t));
-  await db.delete(dealTags).where(eq(dealTags.dealId, d.id));
-  if (ids.length)
+  const removed = before.filter((b) => !ids.includes(b.id)).map((b) => b.id);
+  if (removed.length)
+    await db.delete(dealTags).where(and(eq(dealTags.dealId, d.id), inArray(dealTags.tagId, removed)));
+  if (added.length)
     await db
       .insert(dealTags)
-      .values(ids.map((tagId) => ({ dealId: d.id, tagId })))
+      .values(added.map((tagId) => ({ dealId: d.id, tagId })))
       .onConflictDoNothing();
-  await event(db, organizationId, d.id, actor.userId, "tags", { tags: clean, added });
+  if (added.length || removed.length)
+    await event(db, organizationId, d.id, actor.userId, "tags", { tags: clean, added, kind });
   await notifyOrg(db, { o: organizationId, t: "conversation" });
 }
 
-async function tagIdsByName(db: Db, organizationId: string, names: string[], create: boolean) {
+/** Ids pelo nome. Com kind, recusa nome que já existe no outro tipo; sem kind (importação) aceita qualquer um. */
+async function tagIdsByName(
+  db: Db,
+  organizationId: string,
+  names: string[],
+  create: boolean,
+  kind?: TagKind,
+) {
   const out: string[] = [];
   for (const name of names) {
     let t = await db.query.tags.findFirst({
       where: and(eq(tags.organizationId, organizationId), sql`lower(${tags.name}) = lower(${name})`),
     });
-    if (!t && create) [t] = await db.insert(tags).values({ organizationId, name }).returning();
+    if (t && kind && t.kind !== kind)
+      throw new AppError(
+        "validation",
+        `"${t.name}" já existe como ${KIND_LABEL[t.kind]}. Mude o tipo em CRM > Configurar se quiser.`,
+      );
+    if (!t && create)
+      [t] = await db
+        .insert(tags)
+        .values({ organizationId, name, kind: kind ?? "organize" })
+        .returning();
     if (t) out.push(t.id);
   }
   return out;
@@ -816,8 +847,28 @@ export async function deleteDeal(db: Database, actor: ActorU, organizationId: st
   await notifyOrg(db, { o: organizationId, t: "conversation" });
 }
 
-/** Põe uma etiqueta sem tirar as outras. */
+/** Põe uma etiqueta (ou lista de disparo) sem tirar as outras. */
 export async function addDealTag(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  id: string,
+  name: string,
+  kind: TagKind = "organize",
+) {
+  const d = await loadDeal(db, actor, organizationId, id);
+  const clean = name.trim().slice(0, 40);
+  if (!clean) throw new AppError("validation", `Informe a ${KIND_LABEL[kind]}.`);
+  const [tagId] = await tagIdsByName(db, organizationId, [clean], can(actor, "settings.manage"), kind);
+  if (!tagId)
+    throw new AppError("validation", `Essa ${KIND_LABEL[kind]} não existe. Peça a um gestor para criar.`);
+  const added = await db.insert(dealTags).values({ dealId: d.id, tagId }).onConflictDoNothing().returning();
+  if (added.length)
+    await event(db, organizationId, d.id, actor.userId, "tags", { added: [tagId], tag: clean, kind });
+}
+
+/** Tira uma etiqueta ou lista de disparo da negociação. */
+export async function removeDealTag(
   db: Database,
   actor: ActorU,
   organizationId: string,
@@ -825,13 +876,20 @@ export async function addDealTag(
   name: string,
 ) {
   const d = await loadDeal(db, actor, organizationId, id);
-  const clean = name.trim().slice(0, 40);
-  if (!clean) throw new AppError("validation", "Informe a etiqueta.");
-  const [tagId] = await tagIdsByName(db, organizationId, [clean], can(actor, "settings.manage"));
-  if (!tagId) throw new AppError("validation", "Etiqueta não existe. Peça a um gestor para criar.");
-  const added = await db.insert(dealTags).values({ dealId: d.id, tagId }).onConflictDoNothing().returning();
-  if (added.length)
-    await event(db, organizationId, d.id, actor.userId, "tags", { added: [tagId], tag: clean });
+  const t = await db.query.tags.findFirst({
+    where: and(eq(tags.organizationId, organizationId), sql`lower(${tags.name}) = lower(${name.trim()})`),
+  });
+  if (!t) return;
+  const r = await db
+    .delete(dealTags)
+    .where(and(eq(dealTags.dealId, d.id), eq(dealTags.tagId, t.id)))
+    .returning();
+  if (r.length)
+    await event(db, organizationId, d.id, actor.userId, "tags", {
+      removed: [t.id],
+      tag: t.name,
+      kind: t.kind,
+    });
 }
 
 /** Move sem pessoa (automação). Registra o evento com a origem, o que dispara fluxos de etapa. */
@@ -881,6 +939,7 @@ export async function getOpenDealForContact(
       number: deals.number,
       stageName: pipelineStages.name,
       stageColor: pipelineStages.color,
+      pipelineId: deals.pipelineId,
       pipelineName: pipelines.name,
       qualification: deals.qualification,
       qualificationReason: deals.qualificationReason,
@@ -1031,19 +1090,21 @@ export async function saveTag(
   db: Database,
   actor: ActorU,
   organizationId: string,
-  raw: { id?: string; name: string; color?: string },
+  raw: { id?: string; name: string; color?: string; kind?: string },
 ) {
   requireSettings(actor);
   const name = raw.name.trim().slice(0, 40);
   if (!name) throw new AppError("validation", "Dê um nome à etiqueta.");
   const color = /^#[0-9a-f]{6}$/i.test(raw.color ?? "") ? (raw.color as string) : "#0071e3";
+  const kind: TagKind | undefined =
+    raw.kind === "dispatch" ? "dispatch" : raw.kind === "organize" ? "organize" : undefined;
   try {
     if (raw.id) {
       await db
         .update(tags)
-        .set({ name, color })
+        .set({ name, color, ...(kind ? { kind } : {}) })
         .where(and(eq(tags.id, raw.id), eq(tags.organizationId, organizationId)));
-    } else await db.insert(tags).values({ organizationId, name, color });
+    } else await db.insert(tags).values({ organizationId, name, color, kind: kind ?? "organize" });
   } catch {
     throw new AppError("conflict", "Já existe uma etiqueta com esse nome.");
   }

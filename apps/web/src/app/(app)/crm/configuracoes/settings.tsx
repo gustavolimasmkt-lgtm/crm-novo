@@ -58,7 +58,7 @@ export function Settings({
   sources,
 }: {
   pipelines: { id: string; name: string; isDefault: boolean; stages: StageRow[] }[];
-  tags: { id: string; name: string; color: string }[];
+  tags: { id: string; name: string; color: string; kind: "organize" | "dispatch" }[];
   sources: { id: string; name: string; key: string }[];
 }) {
   return (
@@ -198,7 +198,13 @@ export function Settings({
 
       <aside className="space-y-8">
         <section>
-          <h2 className="mb-2 px-1 text-[13px] font-medium uppercase tracking-wide text-ink-3">Etiquetas</h2>
+          <h2 className="mb-1 px-1 text-[13px] font-medium uppercase tracking-wide text-ink-3">
+            Etiquetas e listas de disparo
+          </h2>
+          <p className="mb-2 px-1 text-[12px] text-ink-3">
+            Etiqueta é para se organizar. Lista de disparo é o público dos disparos de fluxo e campanha, e
+            aparece separada na negociação.
+          </p>
           <div className="divide-y divide-separator overflow-hidden rounded-[var(--radius-card)] bg-surface">
             {tags.map((t) => (
               <div key={t.id} className="flex items-center gap-2 px-3 py-2">
@@ -213,9 +219,18 @@ export function Settings({
                   <Input
                     name="name"
                     defaultValue={t.name}
-                    className="h-8 flex-1"
+                    className="h-8 min-w-0 flex-1"
                     aria-label="Nome da etiqueta"
                   />
+                  <Select
+                    name="kind"
+                    defaultValue={t.kind}
+                    aria-label={`Tipo de ${t.name}`}
+                    className="h-8 w-[118px] text-[12px]"
+                  >
+                    <option value="organize">Etiqueta</option>
+                    <option value="dispatch">Lista de disparo</option>
+                  </Select>
                   <Button size="sm" variant="secondary">
                     Salvar
                   </Button>
@@ -237,11 +252,20 @@ export function Settings({
               />
               <Input
                 name="name"
-                placeholder="Nova etiqueta"
-                className="h-8 flex-1"
+                placeholder="Nova etiqueta ou lista"
+                className="h-8 min-w-0 flex-1"
                 aria-label="Nova etiqueta"
                 required
               />
+              <Select
+                name="kind"
+                defaultValue="organize"
+                aria-label="Tipo da nova"
+                className="h-8 w-[118px] text-[12px]"
+              >
+                <option value="organize">Etiqueta</option>
+                <option value="dispatch">Lista de disparo</option>
+              </Select>
               <Button size="sm">Criar</Button>
             </Op>
           </div>

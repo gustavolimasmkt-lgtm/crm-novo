@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Plus,
   Search,
+  Send,
   Settings2,
   ThumbsDown,
   ThumbsUp,
@@ -54,7 +55,7 @@ type BoardData = {
   showValues: boolean;
 };
 type Person = { id: string; name: string };
-type Tag = { id: string; name: string; color: string };
+type Tag = { id: string; name: string; color: string; kind?: "organize" | "dispatch" };
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const money = (c: number | null | undefined) => brl.format((c ?? 0) / 100);
@@ -289,12 +290,21 @@ export function Board({
             onChange={(e) => setTagId(e.target.value)}
             className="h-9 w-full text-[14px] sm:w-56"
           >
-            <option value="">Todas as etiquetas</option>
-            {tags.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            <option value="">Todas as etiquetas e listas</option>
+            {[
+              { label: "Listas de disparo", items: tags.filter((t) => t.kind === "dispatch") },
+              { label: "Etiquetas", items: tags.filter((t) => t.kind !== "dispatch") },
+            ]
+              .filter((g) => g.items.length)
+              .map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.items.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
           </Select>
         )}
       </div>
@@ -388,13 +398,25 @@ export function Board({
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {d.tagIds.map((t) =>
                           tagById[t] ? (
-                            <span
-                              key={t}
-                              className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-                              style={{ background: tagById[t].color }}
-                            >
-                              {tagById[t].name}
-                            </span>
+                            tagById[t].kind === "dispatch" ? (
+                              <span
+                                key={t}
+                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                                style={{ borderColor: tagById[t].color, color: tagById[t].color }}
+                                title="Lista de disparo"
+                              >
+                                <Send size={10} />
+                                {tagById[t].name}
+                              </span>
+                            ) : (
+                              <span
+                                key={t}
+                                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                                style={{ background: tagById[t].color }}
+                              >
+                                {tagById[t].name}
+                              </span>
+                            )
                           ) : null,
                         )}
                       </div>
@@ -541,7 +563,93 @@ function eventText(e: DealDetail["events"][number]) {
   }
 }
 
-function DealPanel({
+/** Etiquetas (para se organizar) ou listas de disparo (público de fluxos e campanhas) da negociação. */
+function TagSection({
+  kind,
+  items,
+  options,
+  act,
+}: {
+  kind: "organize" | "dispatch";
+  items: { id: string; name: string; color: string }[];
+  options: Tag[];
+  act: (body: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [input, setInput] = useState("");
+  const dispatch = kind === "dispatch";
+  const title = dispatch ? "Listas de disparo" : "Etiquetas";
+  const one = dispatch ? "lista de disparo" : "etiqueta";
+  const listId = `tag-options-${kind}`;
+  return (
+    <section
+      className="rounded-[var(--radius-card)] bg-surface p-4"
+      data-testid={dispatch ? "listas-disparo" : "etiquetas"}
+    >
+      <h3 className="mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wide text-ink-3">
+        {dispatch && <Send size={13} />} {title}
+      </h3>
+      {dispatch && (
+        <p className="mb-2 text-[12px] text-ink-3">
+          Quem está na lista recebe o disparo de fluxo ou campanha dela.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((t) => (
+          <span
+            key={t.id}
+            className={cx(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium",
+              dispatch ? "border" : "text-white",
+            )}
+            style={dispatch ? { borderColor: t.color, color: t.color } : { background: t.color }}
+          >
+            {t.name}
+            <button
+              type="button"
+              aria-label={`Tirar ${one} ${t.name}`}
+              onClick={() =>
+                act({ action: "tags", kind, tags: items.filter((x) => x.id !== t.id).map((x) => x.name) })
+              }
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        {items.length === 0 && (
+          <span className="text-[14px] text-ink-3">{dispatch ? "Nenhuma" : "Nenhuma"}</span>
+        )}
+      </div>
+      <form
+        className="mt-2 flex gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!input.trim()) return;
+          if (await act({ action: "tags", kind, tags: [...items.map((x) => x.name), input.trim()] }))
+            setInput("");
+        }}
+      >
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          list={listId}
+          placeholder={dispatch ? "Adicionar à lista" : "Adicionar etiqueta"}
+          className="h-9"
+          aria-label={dispatch ? "Adicionar à lista de disparo" : "Adicionar etiqueta"}
+        />
+        <datalist id={listId}>
+          {options.map((t) => (
+            <option key={t.id} value={t.name} />
+          ))}
+        </datalist>
+        <Button size="sm" variant="secondary">
+          Adicionar
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+export function DealPanel({
   id,
   board,
   people,
@@ -554,7 +662,7 @@ function DealPanel({
   onChanged,
 }: {
   id: string;
-  board: BoardData;
+  board: { stages: { id: string; name: string }[]; showValues: boolean };
   people: Person[];
   sources: { id: string; name: string }[];
   tags: Tag[];
@@ -568,7 +676,6 @@ function DealPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState("");
-  const [tagInput, setTagInput] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
 
   const reload = useCallback(async () => {
@@ -827,56 +934,18 @@ function DealPanel({
               </Button>
             </form>
 
-            <section className="rounded-[var(--radius-card)] bg-surface p-4">
-              <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">Etiquetas</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {d.tags.map((t) => (
-                  <span
-                    key={t.id}
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium text-white"
-                    style={{ background: t.color }}
-                  >
-                    {t.name}
-                    <button
-                      type="button"
-                      aria-label={`Tirar etiqueta ${t.name}`}
-                      onClick={() =>
-                        act({ action: "tags", tags: d.tags.filter((x) => x.id !== t.id).map((x) => x.name) })
-                      }
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-                {d.tags.length === 0 && <span className="text-[14px] text-ink-3">Nenhuma</span>}
-              </div>
-              <form
-                className="mt-2 flex gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!tagInput.trim()) return;
-                  if (await act({ action: "tags", tags: [...d.tags.map((x) => x.name), tagInput.trim()] }))
-                    setTagInput("");
-                }}
-              >
-                <Input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  list="tag-options"
-                  placeholder="Adicionar etiqueta"
-                  className="h-9"
-                  aria-label="Adicionar etiqueta"
-                />
-                <datalist id="tag-options">
-                  {tags.map((t) => (
-                    <option key={t.id} value={t.name} />
-                  ))}
-                </datalist>
-                <Button size="sm" variant="secondary">
-                  Adicionar
-                </Button>
-              </form>
-            </section>
+            <TagSection
+              kind="dispatch"
+              items={d.tags.filter((t) => t.kind === "dispatch")}
+              options={tags.filter((t) => t.kind === "dispatch")}
+              act={act}
+            />
+            <TagSection
+              kind="organize"
+              items={d.tags.filter((t) => t.kind !== "dispatch")}
+              options={tags.filter((t) => t.kind !== "dispatch")}
+              act={act}
+            />
 
             {d.extra && Object.keys(d.extra).length > 0 && (
               <section className="rounded-[var(--radius-card)] bg-surface p-4">

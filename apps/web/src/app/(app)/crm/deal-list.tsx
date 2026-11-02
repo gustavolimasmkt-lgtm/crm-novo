@@ -25,7 +25,7 @@ type Row = {
   idleDays: number;
 };
 type ListData = { total: number; page: number; pageSize: number; showValues: boolean; rows: Row[] };
-type Opt = { id: string; name: string };
+type Opt = { id: string; name: string; kind?: "organize" | "dispatch" };
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const date = (iso: string) =>
@@ -539,6 +539,8 @@ function BulkBar({
       if (kind === "assign")
         await apply({ type: "assign", userId: value === "none" ? null : value }, "Atribuídas");
       if (kind === "tag") await apply({ type: "tag", name: value }, "Etiqueta aplicada");
+      if (kind === "list_add") await apply({ type: "list_add", name: value }, "Colocadas na lista");
+      if (kind === "list_remove") await apply({ type: "list_remove", name: value }, "Tiradas da lista");
       if (kind === "qualified") await apply({ type: "qualify", value: "qualified" }, "Qualificadas");
       if (kind === "disqualified")
         await apply({ type: "qualify", value: "disqualified", reason: value || null }, "Desqualificadas");
@@ -550,7 +552,9 @@ function BulkBar({
       setBusy(false);
     }
   }
-  const needsValue = kind === "move" || kind === "assign" || kind === "tag";
+  const needsValue =
+    kind === "move" || kind === "assign" || kind === "tag" || kind === "list_add" || kind === "list_remove";
+  const lists = tags.filter((t) => t.kind === "dispatch");
   const ready = kind && (!needsValue || value) && (kind !== "delete" || confirmDel);
 
   return (
@@ -584,6 +588,8 @@ function BulkBar({
           <option value="move">Mover para etapa</option>
           {canReassign && <option value="assign">Trocar responsável</option>}
           <option value="tag">Adicionar etiqueta</option>
+          <option value="list_add">Colocar na lista de disparo</option>
+          <option value="list_remove">Tirar da lista de disparo</option>
           <option value="qualified">Marcar qualificado</option>
           <option value="disqualified">Marcar desqualificado</option>
           {canDelete && <option value="delete">Excluir</option>}
@@ -630,7 +636,26 @@ function BulkBar({
               className="h-8 w-40 text-[13px]"
             />
             <datalist id="bulk-tags">
-              {tags.map((t) => (
+              {tags
+                .filter((t) => t.kind !== "dispatch")
+                .map((t) => (
+                  <option key={t.id} value={t.name} />
+                ))}
+            </datalist>
+          </>
+        )}
+        {(kind === "list_add" || kind === "list_remove") && (
+          <>
+            <Input
+              aria-label="Lista de disparo"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              list="bulk-lists"
+              placeholder="Lista de disparo"
+              className="h-8 w-44 text-[13px]"
+            />
+            <datalist id="bulk-lists">
+              {lists.map((t) => (
                 <option key={t.id} value={t.name} />
               ))}
             </datalist>

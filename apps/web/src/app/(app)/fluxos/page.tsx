@@ -24,7 +24,7 @@ export default async function FlowsPage() {
     listTags(db, ctx.organization.id),
     getFollowupSettings(db, ctx.organization.id),
   ]);
-  const tagOpts = tagList.map((t) => ({ id: t.id, name: t.name }));
+  const tagOpts = tagList.map((t) => ({ id: t.id, name: t.name, kind: t.kind }));
   const stageOpts = pipelines.flatMap((p) =>
     p.stages
       .filter((s) => s.kind !== "won" && s.kind !== "lost")

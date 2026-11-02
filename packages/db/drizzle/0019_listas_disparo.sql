@@ -1,0 +1,1 @@
+ALTER TABLE "tags" ADD COLUMN "kind" text DEFAULT 'organize' NOT NULL;

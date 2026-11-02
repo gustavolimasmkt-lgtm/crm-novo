@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button, cx, Input, Notice } from "@/components/ui";
 
 type Opt = { id: string; name: string };
+type TagOpt = Opt & { kind: "organize" | "dispatch" };
 
 /** Disparar o fluxo para um público: etiqueta, etapa e sem conversa há X dias. */
 export function DispatchPanel({
@@ -18,7 +19,7 @@ export function DispatchPanel({
 }: {
   flowId: string;
   flowName: string;
-  tags: Opt[];
+  tags: TagOpt[];
   stages: Opt[];
   dailyLimit: number;
   onClose: () => void;
@@ -27,6 +28,9 @@ export function DispatchPanel({
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [stageIds, setStageIds] = useState<string[]>([]);
   const [days, setDays] = useState("");
+  const lists = tags.filter((t) => t.kind === "dispatch");
+  const labels = tags.filter((t) => t.kind !== "dispatch");
+  const [more, setMore] = useState(lists.length === 0);
   const [aud, setAud] = useState<{ count: number; capped: boolean; sample: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -92,11 +96,43 @@ export function DispatchPanel({
         <Notice tone="ok">{done}</Notice>
       ) : (
         <>
-          {tags.length > 0 && (
+          {lists.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[13px] font-medium">Lista de disparo</p>
+              <div className="flex flex-wrap gap-2">
+                {lists.map((t) => (
+                  <label key={t.id} className={chip(tagIds.includes(t.id))}>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={tagIds.includes(t.id)}
+                      onChange={() => toggle(tagIds, setTagIds, t.id)}
+                    />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[12px] text-ink-2">
+              Dica: crie listas de disparo em CRM, Configurar (ou marque uma etiqueta como lista) para separar
+              o público do disparo das etiquetas de organização.
+            </p>
+          )}
+          {!more && (
+            <button
+              type="button"
+              className="text-[13px] font-medium text-accent"
+              onClick={() => setMore(true)}
+            >
+              Mais filtros (etiqueta, etapa, dias sem conversa)
+            </button>
+          )}
+          {more && labels.length > 0 && (
             <div>
               <p className="mb-1 text-[13px] font-medium">Com a etiqueta</p>
               <div className="flex flex-wrap gap-2">
-                {tags.map((t) => (
+                {labels.map((t) => (
                   <label key={t.id} className={chip(tagIds.includes(t.id))}>
                     <input
                       type="checkbox"
@@ -110,7 +146,7 @@ export function DispatchPanel({
               </div>
             </div>
           )}
-          {stages.length > 0 && (
+          {more && stages.length > 0 && (
             <div>
               <p className="mb-1 text-[13px] font-medium">Com negociação em</p>
               <div className="flex flex-wrap gap-2">
@@ -128,19 +164,21 @@ export function DispatchPanel({
               </div>
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            <span>Sem conversa há pelo menos</span>
-            <Input
-              aria-label="Dias sem conversa"
-              type="number"
-              min={1}
-              max={3650}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              className="h-9 w-20"
-            />
-            <span>dias (vazio: não filtra)</span>
-          </div>
+          {more && (
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              <span>Sem conversa há pelo menos</span>
+              <Input
+                aria-label="Dias sem conversa"
+                type="number"
+                min={1}
+                max={3650}
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                className="h-9 w-20"
+              />
+              <span>dias (vazio: não filtra)</span>
+            </div>
+          )}
           <p className="text-[14px] font-semibold" data-testid="publico-disparo">
             {aud
               ? `${aud.count} cliente(s)${aud.capped ? " (limite atingido, filtre mais)" : ""}${
@@ -153,7 +191,7 @@ export function DispatchPanel({
           {aud?.sample.length ? <p className="text-[12px] text-ink-3">Ex.: {aud.sample.join(", ")}</p> : null}
           {noFilter && (
             <Notice tone="accent">
-              Sem filtro o disparo vai para todos os contatos. Escolha uma etiqueta.
+              Sem filtro o disparo vai para todos os contatos. Escolha uma lista de disparo.
             </Notice>
           )}
           <p className="text-[12px] text-ink-3">

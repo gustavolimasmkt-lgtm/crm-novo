@@ -9,14 +9,17 @@ import {
   createOrganization,
   deleteInactivityRule,
   exportDealsCsv,
+  getDeal,
   listDeals,
   listInactivityRules,
   listPipelines,
+  listTags,
   previewInactivityRule,
   processInactivity,
   saveInactivityRule,
   saveTag,
   setDealQualification,
+  setDealTags,
 } from "../src/index.js";
 import { createMaster, db, resetDb } from "./helpers.js";
 
@@ -147,6 +150,37 @@ describe("lista do CRM", () => {
     });
     expect(await db.select().from(deals)).toHaveLength(0);
     await expect(bulkDeals(db, admin, org.id, { ids: [] }, { type: "delete" })).rejects.toThrow(/Nenhuma/);
+  });
+});
+
+describe("listas de disparo", () => {
+  it("ficam separadas das etiquetas, em massa e no disparo", async () => {
+    const { org, admin, seller } = await setup();
+    const id = await createDeal(db, admin, org.id, { phone: "48999005001", assignedUserId: null });
+    await setDealTags(db, admin, org.id, id, ["Cliente chato"]);
+    await setDealTags(db, admin, org.id, id, ["Feirão Sicoob"], "dispatch");
+    // Salvar as etiquetas não mexe nas listas (e vice-versa).
+    await setDealTags(db, admin, org.id, id, ["Cliente chato", "Quer SUV"]);
+    const d = await getDeal(db, admin, org.id, id);
+    expect(d.tags.map((t) => `${t.kind}:${t.name}`).sort()).toEqual([
+      "dispatch:Feirão Sicoob",
+      "organize:Cliente chato",
+      "organize:Quer SUV",
+    ]);
+    await expect(setDealTags(db, admin, org.id, id, ["Quer SUV"], "dispatch")).rejects.toThrow(
+      /já existe como etiqueta/,
+    );
+    // Vendedor usa as listas que existem, não cria novas.
+    await expect(setDealTags(db, seller, org.id, id, ["Lista nova"], "dispatch")).resolves.toBeUndefined();
+    expect((await listTags(db, org.id)).some((t) => t.name === "Lista nova")).toBe(false);
+
+    const id2 = await createDeal(db, admin, org.id, { phone: "48999005002" });
+    await bulkDeals(db, admin, org.id, { ids: [id, id2] }, { type: "list_add", name: "Follow up diário" });
+    const fu = (await listTags(db, org.id)).find((t) => t.name === "Follow up diário");
+    expect(fu?.kind).toBe("dispatch");
+    expect((await listDeals(db, admin, org.id, { tagId: fu?.id })).total).toBe(2);
+    await bulkDeals(db, admin, org.id, { ids: [id] }, { type: "list_remove", name: "follow up diário" });
+    expect((await listDeals(db, admin, org.id, { tagId: fu?.id })).total).toBe(1);
   });
 });
 

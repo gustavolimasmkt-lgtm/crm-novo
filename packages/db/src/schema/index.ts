@@ -475,6 +475,8 @@ export const tags = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     color: text("color").notNull().default("#0071e3"),
+    /** organize = etiqueta para se organizar; dispatch = lista de disparo (público de fluxos e campanhas). */
+    kind: text("kind").$type<"organize" | "dispatch">().notNull().default("organize"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("tags_org_name_uq").on(t.organizationId, sql`lower(${t.name})`)],
@@ -818,7 +820,7 @@ export const notificationOutbox = pgTable(
 
 export type ConnectionStatus = (typeof connectionStatusEnum.enumValues)[number];
 
-export const schemaVersion = 19 as const;
+export const schemaVersion = 20 as const;
 export type Role = (typeof roleEnum.enumValues)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",

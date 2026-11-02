@@ -34,7 +34,9 @@ export default async function CrmSettingsPage() {
           isDefault: p.isDefault,
           stages: p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color, kind: s.kind })),
         }))}
-        tags={tagList.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+        tags={[...tagList]
+          .sort((a, b) => Number(b.kind === "dispatch") - Number(a.kind === "dispatch"))
+          .map((t) => ({ id: t.id, name: t.name, color: t.color, kind: t.kind }))}
         sources={sources.map((s) => ({ id: s.id, name: s.name, key: s.key }))}
       />
       <InactivityRules

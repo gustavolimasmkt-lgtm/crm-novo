@@ -26,7 +26,7 @@ export default async function CrmPage({
       initialOpen={sp.n ?? null}
       people={people}
       sources={sources.map((s) => ({ id: s.id, name: s.name }))}
-      tags={tagList.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+      tags={tagList.map((t) => ({ id: t.id, name: t.name, color: t.color, kind: t.kind }))}
       me={ctx.user.id}
       canReassign={can(ctx.actor, "deals.reassign")}
       canDelete={can(ctx.actor, "deals.delete")}

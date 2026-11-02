@@ -127,13 +127,18 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await expect(page.getByText("Nada programado")).toBeVisible();
   await page.screenshot({ path: `test-results/fluxos-${testInfo.project.name}.png`, fullPage: true });
 
-  // Disparo para quem tem a etiqueta "Feirão".
-  await page.goto("/crm");
-  await page.getByTestId("deal-card").filter({ hasText: "Cliente Teste" }).first().click();
+  // Lista de disparo "Feirão", colocada pela negociação aberta direto da conversa.
+  await page.goto("/conversas");
+  await page.getByTestId("conversation-item").filter({ hasText: "Cliente Teste" }).click();
+  await page.getByTestId("deal-chip").click();
   const panel = page.getByRole("dialog", { name: "Negociação" });
-  await panel.getByLabel("Adicionar etiqueta").fill("Feirão");
-  await panel.getByRole("button", { name: "Adicionar", exact: true }).click();
-  await expect(panel.getByText("Feirão").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/conversas/);
+  const listas = panel.getByTestId("listas-disparo");
+  await listas.getByLabel("Adicionar à lista de disparo").fill("Feirão");
+  await listas.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await expect(listas.getByText("Feirão")).toBeVisible();
+  await expect(panel.getByTestId("etiquetas")).not.toContainText("Feirão");
+  await panel.getByRole("button", { name: "Fechar" }).last().click();
   await page.goto("/fluxos");
   const flowRow = page.getByTestId("fluxo").filter({ hasText: "Reaquecer cliente" });
   await flowRow.getByRole("button", { name: "Disparar" }).click();

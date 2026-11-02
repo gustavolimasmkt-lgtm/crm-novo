@@ -57,7 +57,12 @@ export async function crmSettingsAction(_: FormState, fd: FormData): Promise<For
         await deleteStage(...a, id);
         break;
       case "tag.save":
-        await saveTag(...a, { id: id || undefined, name: str(fd, "name"), color: str(fd, "color") });
+        await saveTag(...a, {
+          id: id || undefined,
+          name: str(fd, "name"),
+          color: str(fd, "color"),
+          kind: str(fd, "kind") || undefined,
+        });
         break;
       case "tag.delete":
         await deleteTag(...a, id);
