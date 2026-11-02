@@ -18,6 +18,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Android: o teclado encolhe a tela em vez de cobrir a caixa de mensagem.
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f5f7" },
     { media: "(prefers-color-scheme: dark)", color: "#000000" },

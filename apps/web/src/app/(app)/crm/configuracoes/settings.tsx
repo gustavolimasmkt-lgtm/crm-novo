@@ -45,7 +45,7 @@ function IconBtn({ label, children, tone }: { label: string; children: ReactNode
     <button
       aria-label={label}
       title={label}
-      className={`rounded-full p-1.5 hover:bg-fill ${tone === "danger" ? "text-danger" : "text-ink-2"}`}
+      className={`rounded-full p-2 hover:bg-fill md:p-1.5 ${tone === "danger" ? "text-danger" : "text-ink-2"}`}
     >
       {children}
     </button>

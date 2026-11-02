@@ -115,6 +115,29 @@ export function Board({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dragging = useRef<string | null>(null);
+  // Celular: qual etapa está na tela (o quadro desliza de uma em uma).
+  const boardRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [activeStage, setActiveStage] = useState(0);
+  const stageStep = () => {
+    const el = boardRef.current;
+    const first = el?.firstElementChild as HTMLElement | null;
+    return first ? first.offsetWidth + 12 : 1;
+  };
+  function onBoardScroll() {
+    const el = boardRef.current;
+    if (!el) return;
+    const i = Math.round(el.scrollLeft / stageStep());
+    if (i === activeStage) return;
+    setActiveStage(i);
+    // Rola só a faixa de etapas (scrollIntoView levaria a página junto).
+    const chips = chipsRef.current;
+    const chip = chips?.children[i] as HTMLElement | undefined;
+    if (chips && chip) chips.scrollTo({ left: chip.offsetLeft - 16, behavior: "smooth" });
+  }
+  function goToStage(i: number) {
+    boardRef.current?.scrollTo({ left: i * stageStep(), behavior: "smooth" });
+  }
   const [over, setOver] = useState<string | null>(null);
 
   const boardReq = useRef(0);
@@ -203,8 +226,8 @@ export function Board({
 
   return (
     <div className="md:-mx-4 md:-mt-4">
-      <header className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="large-title mr-2">CRM</h1>
+      <header className="mb-3 flex items-center gap-2 md:mb-4">
+        <h1 className="large-title mr-1 md:mr-2">CRM</h1>
         <div
           className="flex rounded-full bg-fill p-0.5 text-[13px] font-medium"
           role="tablist"
@@ -217,46 +240,53 @@ export function Board({
               role="tab"
               aria-selected={view === v}
               onClick={() => setView(v)}
-              className={cx("rounded-full px-3 py-1", view === v ? "bg-surface shadow-sm" : "text-ink-2")}
+              className={cx(
+                "rounded-full px-3 py-1.5 md:py-1",
+                view === v ? "bg-surface shadow-sm" : "text-ink-2",
+              )}
             >
               {v === "quadro" ? "Quadro" : "Lista"}
             </button>
           ))}
         </div>
-        <Select
-          aria-label="Funil"
-          value={pipelineId}
-          onChange={(e) => setPipelineId(e.target.value)}
-          className="h-9 w-full text-[14px] sm:w-64"
-        >
-          {board.pipelines.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {/* No celular só os ícones; o nome continua no leitor de tela. */}
+        <div className="ml-auto flex items-center gap-1.5 md:gap-2">
           {canSettings && (
             <>
-              <Button size="sm" variant="secondary" onClick={() => setImporting(true)}>
-                <Upload size={15} /> Importar
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setImporting(true)}
+                aria-label="Importar"
+                title="Importar"
+                className="w-9 px-0 md:w-auto md:px-3"
+              >
+                <Upload size={15} /> <span className="hidden md:inline">Importar</span>
               </Button>
               <Link
                 href="/crm/configuracoes"
-                className="inline-flex h-8 items-center gap-2 rounded-full bg-fill px-3 text-[13px] font-medium hover:bg-fill-strong"
+                aria-label="Configurar"
+                title="Configurar"
+                className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full bg-fill text-[13px] font-medium hover:bg-fill-strong md:h-8 md:w-auto md:px-3"
               >
-                <Settings2 size={15} /> Configurar
+                <Settings2 size={15} /> <span className="hidden md:inline">Configurar</span>
               </Link>
             </>
           )}
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus size={15} /> Nova negociação
+          <Button
+            size="sm"
+            onClick={() => setCreating(true)}
+            aria-label="Nova negociação"
+            title="Nova negociação"
+            className="w-9 px-0 md:w-auto md:px-3"
+          >
+            <Plus size={17} /> <span className="hidden md:inline">Nova negociação</span>
           </Button>
         </div>
       </header>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <div className="relative w-full sm:w-auto sm:min-w-56 sm:flex-1">
+      <div className="mb-3 space-y-2 md:mb-4 md:flex md:flex-wrap md:gap-2 md:space-y-0">
+        <div className="relative md:min-w-56 md:flex-1">
           <Search
             size={16}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
@@ -264,49 +294,65 @@ export function Board({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar título, contato, telefone ou número"
-            className="h-9 pl-9"
+            placeholder="Buscar nome, telefone ou número"
+            className="h-10 pl-9 md:h-9"
             aria-label="Buscar negociações"
           />
         </div>
-        <Select
-          aria-label="Responsável"
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          className="h-9 w-full text-[14px] sm:w-56"
-        >
-          <option value="">Todos os responsáveis</option>
-          <option value="none">Sem responsável</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
-        {tags.length > 0 && (
-          <Select
-            aria-label="Etiqueta"
-            value={tagId}
-            onChange={(e) => setTagId(e.target.value)}
-            className="h-9 w-full text-[14px] sm:w-56"
-          >
-            <option value="">Todas as etiquetas e listas</option>
-            {[
-              { label: "Listas de disparo", items: tags.filter((t) => t.kind === "dispatch") },
-              { label: "Etiquetas", items: tags.filter((t) => t.kind !== "dispatch") },
-            ]
-              .filter((g) => g.items.length)
-              .map((g) => (
-                <optgroup key={g.label} label={g.label}>
-                  {g.items.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </optgroup>
+        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:overflow-visible md:px-0">
+          {board.pipelines.length > 1 && (
+            <Select
+              aria-label="Funil"
+              value={pipelineId}
+              onChange={(e) => setPipelineId(e.target.value)}
+              className="h-9 w-auto max-w-[70vw] shrink-0 text-[14px] md:w-56"
+            >
+              {board.pipelines.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
+            </Select>
+          )}
+          <Select
+            aria-label="Responsável"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            className={cx("h-9 w-auto shrink-0 text-[14px] md:w-56", owner && "bg-accent-soft text-accent")}
+          >
+            <option value="">Todos os responsáveis</option>
+            <option value="none">Sem responsável</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
           </Select>
-        )}
+          {tags.length > 0 && (
+            <Select
+              aria-label="Etiqueta"
+              value={tagId}
+              onChange={(e) => setTagId(e.target.value)}
+              className={cx("h-9 w-auto shrink-0 text-[14px] md:w-56", tagId && "bg-accent-soft text-accent")}
+            >
+              <option value="">Etiquetas e listas</option>
+              {[
+                { label: "Listas de disparo", items: tags.filter((t) => t.kind === "dispatch") },
+                { label: "Etiquetas", items: tags.filter((t) => t.kind !== "dispatch") },
+              ]
+                .filter((g) => g.items.length)
+                .map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+            </Select>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -333,125 +379,158 @@ export function Board({
           onChanged={load}
         />
       ) : (
-        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0" data-testid="board">
-          {board.stages.map((s) => (
-            <section
-              key={s.id}
-              aria-label={`Etapa ${s.name}`}
-              data-testid="stage"
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOver(s.id);
-              }}
-              onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOver(null);
-                const id = dragging.current ?? e.dataTransfer.getData("text/plain");
-                if (id) move(id, s.id);
-              }}
-              className={cx(
-                "flex max-h-[calc(100dvh-15rem)] w-[280px] shrink-0 flex-col rounded-[var(--radius-card)] bg-fill/60 transition-colors md:max-h-[calc(100dvh-13rem)]",
-                over === s.id && "bg-accent-soft",
-              )}
-            >
-              <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
-                <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s.name}</h2>
-                <span className="text-[13px] text-ink-3">{s.count}</span>
-              </div>
-              {board.showValues && <p className="px-3 pb-2 text-[12px] text-ink-2">{money(s.totalCents)}</p>}
-              <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-                {s.deals.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    draggable
-                    data-testid="deal-card"
-                    onDragStart={(e) => {
-                      dragging.current = d.id;
-                      e.dataTransfer.setData("text/plain", d.id);
-                    }}
-                    onDragEnd={() => {
-                      dragging.current = null;
-                    }}
-                    onClick={() => setOpen(d.id)}
-                    className="block w-full rounded-xl bg-surface p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-2 text-[15px] font-medium leading-snug">{d.title}</p>
-                      <span className="shrink-0 text-[11px] text-ink-3">#{d.number}</span>
-                    </div>
-                    {d.interest && (
-                      <p
-                        className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-accent"
-                        data-testid="deal-interest"
-                      >
-                        <Car size={14} className="shrink-0" />
-                        <span className="truncate">{d.interest}</span>
-                      </p>
-                    )}
-                    {board.showValues && (
-                      <p className="mt-1 text-[14px] font-semibold">{money(d.valueCents)}</p>
-                    )}
-                    {d.tagIds.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {d.tagIds.map((t) =>
-                          tagById[t] ? (
-                            tagById[t].kind === "dispatch" ? (
-                              <span
-                                key={t}
-                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-                                style={{ borderColor: tagById[t].color, color: tagById[t].color }}
-                                title="Lista de disparo"
-                              >
-                                <Send size={10} />
-                                {tagById[t].name}
-                              </span>
-                            ) : (
-                              <span
-                                key={t}
-                                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-                                style={{ background: tagById[t].color }}
-                              >
-                                {tagById[t].name}
-                              </span>
-                            )
-                          ) : null,
-                        )}
-                      </div>
-                    )}
-                    <div className="mt-2 flex items-center gap-2 text-[12px] text-ink-3">
-                      {d.assignedUserName ? <Avatar name={d.assignedUserName} size={20} /> : null}
-                      <span className="min-w-0 flex-1 truncate">
-                        {d.assignedUserName ?? "Sem responsável"}
-                      </span>
-                      {d.qualification && (
-                        <span
-                          className={cx(
-                            "inline-flex items-center",
-                            d.qualification === "qualified" ? "text-ok" : "text-danger",
-                          )}
-                          title={d.qualification === "qualified" ? "Qualificado" : "Desqualificado"}
-                        >
-                          {d.qualification === "qualified" ? (
-                            <ThumbsUp size={13} />
-                          ) : (
-                            <ThumbsDown size={13} />
-                          )}
-                        </span>
-                      )}
-                      <span>{daysSince(d.updatedAt)}</span>
-                    </div>
-                  </button>
-                ))}
-                {s.deals.length === 0 && (
-                  <p className="px-2 py-6 text-center text-[13px] text-ink-3">Vazio</p>
+        <>
+          {/* Celular: atalhos para as etapas; o quadro desliza de uma em uma. */}
+          <div
+            className="scrollbar-none sticky top-12 z-10 -mx-4 mb-1 flex gap-1.5 overflow-x-auto bg-bg px-4 py-1.5 md:hidden"
+            ref={chipsRef}
+          >
+            {board.stages.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => goToStage(i)}
+                aria-current={activeStage === i}
+                className={cx(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium",
+                  activeStage === i ? "bg-ink text-bg" : "bg-fill text-ink-2",
                 )}
-              </div>
-            </section>
-          ))}
-        </div>
+              >
+                <span className="size-2 rounded-full" style={{ background: s.color }} />
+                {s.name}
+                <span className={cx("tabular-nums", activeStage === i ? "opacity-70" : "text-ink-3")}>
+                  {s.count}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div
+            ref={boardRef}
+            onScroll={onBoardScroll}
+            className="scrollbar-none -mx-4 flex snap-x snap-mandatory items-start gap-3 overflow-x-auto scroll-px-4 px-4 pb-4 md:mx-0 md:snap-none md:items-stretch md:px-0 md:[scrollbar-width:auto]"
+            data-testid="board"
+          >
+            {board.stages.map((s) => (
+              <section
+                key={s.id}
+                aria-label={`Etapa ${s.name}`}
+                data-testid="stage"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setOver(s.id);
+                }}
+                onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setOver(null);
+                  const id = dragging.current ?? e.dataTransfer.getData("text/plain");
+                  if (id) move(id, s.id);
+                }}
+                className={cx(
+                  "flex w-[calc(100vw-3rem)] shrink-0 snap-start flex-col rounded-[var(--radius-card)] bg-fill/60 transition-colors md:max-h-[calc(100dvh-13rem)] md:w-[280px]",
+                  over === s.id && "bg-accent-soft",
+                )}
+              >
+                <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+                  <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{s.name}</h2>
+                  <span className="text-[13px] text-ink-3">{s.count}</span>
+                </div>
+                {board.showValues && (
+                  <p className="px-3 pb-2 text-[12px] text-ink-2">{money(s.totalCents)}</p>
+                )}
+                <div className="flex-1 space-y-2 px-2 pb-2 md:overflow-y-auto">
+                  {s.deals.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      draggable
+                      data-testid="deal-card"
+                      onDragStart={(e) => {
+                        dragging.current = d.id;
+                        e.dataTransfer.setData("text/plain", d.id);
+                      }}
+                      onDragEnd={() => {
+                        dragging.current = null;
+                      }}
+                      onClick={() => setOpen(d.id)}
+                      className="block w-full rounded-xl bg-surface p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition hover:shadow-md"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-2 text-[15px] font-medium leading-snug">{d.title}</p>
+                        <span className="shrink-0 text-[11px] text-ink-3">#{d.number}</span>
+                      </div>
+                      {d.interest && (
+                        <p
+                          className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-accent"
+                          data-testid="deal-interest"
+                        >
+                          <Car size={14} className="shrink-0" />
+                          <span className="truncate">{d.interest}</span>
+                        </p>
+                      )}
+                      {board.showValues && (d.valueCents ?? 0) > 0 && (
+                        <p className="mt-1 text-[14px] font-semibold">{money(d.valueCents)}</p>
+                      )}
+                      {d.tagIds.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {d.tagIds.map((t) =>
+                            tagById[t] ? (
+                              tagById[t].kind === "dispatch" ? (
+                                <span
+                                  key={t}
+                                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                                  style={{ borderColor: tagById[t].color, color: tagById[t].color }}
+                                  title="Lista de disparo"
+                                >
+                                  <Send size={10} />
+                                  {tagById[t].name}
+                                </span>
+                              ) : (
+                                <span
+                                  key={t}
+                                  className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                                  style={{ background: tagById[t].color }}
+                                >
+                                  {tagById[t].name}
+                                </span>
+                              )
+                            ) : null,
+                          )}
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center gap-2 text-[12px] text-ink-3">
+                        {d.assignedUserName ? <Avatar name={d.assignedUserName} size={20} /> : null}
+                        <span className="min-w-0 flex-1 truncate">
+                          {d.assignedUserName ?? "Sem responsável"}
+                        </span>
+                        {d.qualification && (
+                          <span
+                            className={cx(
+                              "inline-flex items-center",
+                              d.qualification === "qualified" ? "text-ok" : "text-danger",
+                            )}
+                            title={d.qualification === "qualified" ? "Qualificado" : "Desqualificado"}
+                          >
+                            {d.qualification === "qualified" ? (
+                              <ThumbsUp size={13} />
+                            ) : (
+                              <ThumbsDown size={13} />
+                            )}
+                          </span>
+                        )}
+                        <span>{daysSince(d.updatedAt)}</span>
+                      </div>
+                    </button>
+                  ))}
+                  {s.deals.length === 0 && (
+                    <p className="px-2 py-6 text-center text-[13px] text-ink-3">Vazio</p>
+                  )}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
       )}
 
       {open && (
@@ -725,317 +804,324 @@ export function DealPanel({
       aria-label="Negociação"
     >
       <button type="button" className="hidden flex-1 md:block" aria-label="Fechar" onClick={onClose} />
-      <aside className="h-full w-full max-w-[460px] overflow-y-auto bg-bg p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] shadow-float">
-        <div className="mb-4 flex items-center justify-between">
+      <aside className="flex h-full w-full max-w-[460px] flex-col bg-bg shadow-float">
+        <div className="flex shrink-0 items-center justify-between border-b border-separator px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
           <p className="text-[13px] font-medium text-ink-3">
             {d ? `Negociação #${d.number}` : "Carregando…"}
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2"
             aria-label="Fechar"
           >
             <X size={18} />
           </button>
         </div>
-        {error && (
-          <div className="mb-3">
-            <Notice>{error}</Notice>
-          </div>
-        )}
-        {d && (
-          <div className="space-y-5">
-            {d.contact && (
-              <div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface p-3">
-                <Avatar name={d.contact.name || d.contact.phone || "?"} size={44} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[16px] font-semibold">
-                    {d.contact.name || formatPhone(d.contact.phone)}
-                  </p>
-                  <p className="truncate text-[13px] text-ink-2">{formatPhone(d.contact.phone)}</p>
-                </div>
-                {d.conversationId && (
-                  <Link
-                    href={`/conversas?c=${d.conversationId}`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent px-3 text-[13px] font-medium text-white"
-                  >
-                    <MessageCircle size={14} /> Conversa
-                  </Link>
-                )}
-              </div>
-            )}
-            <section className="rounded-[var(--radius-card)] bg-surface p-4">
-              <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">
-                Qualificação do lead
-              </h3>
-              <QualifyButtons
-                dealId={d.id}
-                value={d.qualification}
-                reason={d.qualificationReason}
-                meta={d.qualifyMeta}
-                onChanged={() => {
-                  reload();
-                  onChanged();
-                }}
-              />
-            </section>
-            <DealSchedule key={d.conversationId ?? "sem"} conversationId={d.conversationId} />
-            <Link
-              href={`/tarefas?negociacao=${d.id}`}
-              className="flex items-center justify-between rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[15px] hover:bg-fill/60"
-            >
-              <span className="flex items-center gap-2">
-                <ListTodo size={16} className="text-ink-2" /> Tarefas desta negociação
-              </span>
-              <span aria-hidden className="text-ink-3">
-                ›
-              </span>
-            </Link>
-            {(d.adId || d.adTitle) && (
-              <div
-                className="rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[14px]"
-                data-testid="anuncio-negociacao"
-              >
-                <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">
-                  Veio de anúncio
-                  {d.adApp
-                    ? ` · ${d.adApp === "instagram" ? "Instagram" : d.adApp === "facebook" ? "Facebook" : d.adApp}`
-                    : ""}
-                </p>
-                <p className="font-medium">{d.adTitle ?? `Anúncio ${d.adId}`}</p>
-                {d.adUrl && (
-                  <a
-                    href={d.adUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[13px] text-accent underline"
-                  >
-                    Ver anúncio
-                  </a>
-                )}
-              </div>
-            )}
-            {d.aiSummary && (
-              <div
-                className="space-y-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-[14px]"
-                data-testid="resumo-negociacao"
-              >
-                <p className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">Resumo da IA</span>
-                  <span
-                    className={cx(
-                      "rounded-full px-2 py-0.5 text-[12px] font-semibold",
-                      d.aiSummary.temperatura === "quente"
-                        ? "bg-danger-soft text-danger"
-                        : d.aiSummary.temperatura === "morno"
-                          ? "bg-warn-soft text-warn"
-                          : "bg-fill text-ink-2",
-                    )}
-                  >
-                    {d.aiSummary.temperatura} · {d.aiSummary.nota}/10
-                  </span>
-                </p>
-                {d.aiSummary.interesse && <p className="text-ink-2">Interesse: {d.aiSummary.interesse}</p>}
-                <p>{d.aiSummary.resumo}</p>
-                {d.aiSummary.objecoes && <p className="text-ink-2">Objeções: {d.aiSummary.objecoes}</p>}
-                {d.aiSummary.proximoPasso && (
-                  <p className="text-ink-2">Próximo passo: {d.aiSummary.proximoPasso}</p>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] bg-surface p-4">
-              <Field label="Etapa">
-                <Select
-                  value={d.stageId}
-                  onChange={(e) => act({ action: "move", stageId: e.target.value })}
-                  aria-label="Etapa"
-                >
-                  {board.stages.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                  {!board.stages.some((s) => s.id === d.stageId) && (
-                    <option value={d.stageId}>Outro funil</option>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          {error && (
+            <div className="mb-3">
+              <Notice>{error}</Notice>
+            </div>
+          )}
+          {d && (
+            <div className="space-y-5">
+              {d.contact && (
+                <div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface p-3">
+                  <Avatar name={d.contact.name || d.contact.phone || "?"} size={44} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[16px] font-semibold">
+                      {d.contact.name || formatPhone(d.contact.phone)}
+                    </p>
+                    <p className="truncate text-[13px] text-ink-2">{formatPhone(d.contact.phone)}</p>
+                  </div>
+                  {d.conversationId && (
+                    <Link
+                      href={`/conversas?c=${d.conversationId}`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent px-3 text-[13px] font-medium text-white"
+                    >
+                      <MessageCircle size={14} /> Conversa
+                    </Link>
                   )}
-                </Select>
-              </Field>
-              <Field label="Responsável">
-                {canReassign ? (
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] bg-surface p-4">
+                <Field label="Etapa">
                   <Select
-                    aria-label="Responsável da negociação"
-                    value={d.assignedUserId ?? ""}
-                    onChange={(e) => act({ action: "assign", userId: e.target.value || null })}
+                    value={d.stageId}
+                    onChange={(e) => act({ action: "move", stageId: e.target.value })}
+                    aria-label="Etapa"
                   >
-                    <option value="">Sem responsável</option>
-                    {people.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
+                    {board.stages.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                    {!board.stages.some((s) => s.id === d.stageId) && (
+                      <option value={d.stageId}>Outro funil</option>
+                    )}
+                  </Select>
+                </Field>
+                <Field label="Responsável">
+                  {canReassign ? (
+                    <Select
+                      aria-label="Responsável da negociação"
+                      value={d.assignedUserId ?? ""}
+                      onChange={(e) => act({ action: "assign", userId: e.target.value || null })}
+                    >
+                      <option value="">Sem responsável</option>
+                      {people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : d.assignedUserId === me ? (
+                    <p className="text-[15px]">Você</p>
+                  ) : d.assignedUserId ? (
+                    <p className="text-[15px]">{people.find((p) => p.id === d.assignedUserId)?.name}</p>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => act({ action: "assign", userId: me })}
+                    >
+                      Assumir para mim
+                    </Button>
+                  )}
+                </Field>
+              </div>
+
+              <section className="rounded-[var(--radius-card)] bg-surface p-4">
+                <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">
+                  Qualificação do lead
+                </h3>
+                <QualifyButtons
+                  dealId={d.id}
+                  value={d.qualification}
+                  reason={d.qualificationReason}
+                  meta={d.qualifyMeta}
+                  onChanged={() => {
+                    reload();
+                    onChanged();
+                  }}
+                />
+              </section>
+              {(d.adId || d.adTitle) && (
+                <div
+                  className="rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[14px]"
+                  data-testid="anuncio-negociacao"
+                >
+                  <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">
+                    Veio de anúncio
+                    {d.adApp
+                      ? ` · ${d.adApp === "instagram" ? "Instagram" : d.adApp === "facebook" ? "Facebook" : d.adApp}`
+                      : ""}
+                  </p>
+                  <p className="font-medium">{d.adTitle ?? `Anúncio ${d.adId}`}</p>
+                  {d.adUrl && (
+                    <a
+                      href={d.adUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[13px] text-accent underline"
+                    >
+                      Ver anúncio
+                    </a>
+                  )}
+                </div>
+              )}
+              {d.aiSummary && (
+                <div
+                  className="space-y-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-[14px]"
+                  data-testid="resumo-negociacao"
+                >
+                  <p className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">Resumo da IA</span>
+                    <span
+                      className={cx(
+                        "rounded-full px-2 py-0.5 text-[12px] font-semibold",
+                        d.aiSummary.temperatura === "quente"
+                          ? "bg-danger-soft text-danger"
+                          : d.aiSummary.temperatura === "morno"
+                            ? "bg-warn-soft text-warn"
+                            : "bg-fill text-ink-2",
+                      )}
+                    >
+                      {d.aiSummary.temperatura} · {d.aiSummary.nota}/10
+                    </span>
+                  </p>
+                  {d.aiSummary.interesse && <p className="text-ink-2">Interesse: {d.aiSummary.interesse}</p>}
+                  <p>{d.aiSummary.resumo}</p>
+                  {d.aiSummary.objecoes && <p className="text-ink-2">Objeções: {d.aiSummary.objecoes}</p>}
+                  {d.aiSummary.proximoPasso && (
+                    <p className="text-ink-2">Próximo passo: {d.aiSummary.proximoPasso}</p>
+                  )}
+                </div>
+              )}
+
+              <form
+                onSubmit={save}
+                className="space-y-3 rounded-[var(--radius-card)] bg-surface p-4"
+                key={`${d.id}${d.title}${d.interest ?? ""}`}
+              >
+                <Field label="Título">
+                  <Input name="title" defaultValue={d.title} required maxLength={120} />
+                </Field>
+                <Field label="Carro / interesse" hint="Aparece no card do CRM.">
+                  <Input
+                    name="interest"
+                    defaultValue={d.interest ?? ""}
+                    maxLength={120}
+                    placeholder="Ex.: HR-V prata 2020"
+                  />
+                </Field>
+                {board.showValues && (
+                  <Field label="Valor (R$)">
+                    <Input name="value" defaultValue={centsToInput(d.valueCents)} inputMode="decimal" />
+                  </Field>
+                )}
+                <Field label="Fonte">
+                  <Select name="sourceId" defaultValue={d.sourceId ?? ""}>
+                    <option value="">Sem fonte</option>
+                    {sources.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
                       </option>
                     ))}
                   </Select>
-                ) : d.assignedUserId === me ? (
-                  <p className="text-[15px]">Você</p>
-                ) : d.assignedUserId ? (
-                  <p className="text-[15px]">{people.find((p) => p.id === d.assignedUserId)?.name}</p>
-                ) : (
-                  <Button size="sm" variant="secondary" onClick={() => act({ action: "assign", userId: me })}>
-                    Assumir para mim
-                  </Button>
-                )}
-              </Field>
-            </div>
-
-            <form
-              onSubmit={save}
-              className="space-y-3 rounded-[var(--radius-card)] bg-surface p-4"
-              key={`${d.id}${d.title}${d.interest ?? ""}`}
-            >
-              <Field label="Título">
-                <Input name="title" defaultValue={d.title} required maxLength={120} />
-              </Field>
-              <Field label="Carro / interesse" hint="Aparece no card do CRM.">
-                <Input
-                  name="interest"
-                  defaultValue={d.interest ?? ""}
-                  maxLength={120}
-                  placeholder="Ex.: HR-V prata 2020"
-                />
-              </Field>
-              {board.showValues && (
-                <Field label="Valor (R$)">
-                  <Input name="value" defaultValue={centsToInput(d.valueCents)} inputMode="decimal" />
                 </Field>
-              )}
-              <Field label="Fonte">
-                <Select name="sourceId" defaultValue={d.sourceId ?? ""}>
-                  <option value="">Sem fonte</option>
-                  {sources.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Descrição">
-                <textarea
-                  name="description"
-                  defaultValue={d.description ?? ""}
-                  rows={3}
-                  maxLength={4000}
-                  className="w-full rounded-xl bg-fill px-3.5 py-2.5 text-[15px] outline-none focus:bg-surface focus:shadow-[0_0_0_4px_var(--accent-soft)]"
-                />
-              </Field>
-              {saved && <Notice tone="ok">Salvo.</Notice>}
-              <Button className="w-full" variant="secondary">
-                Salvar
-              </Button>
-            </form>
-
-            <TagSection
-              kind="dispatch"
-              items={d.tags.filter((t) => t.kind === "dispatch")}
-              options={tags.filter((t) => t.kind === "dispatch")}
-              act={act}
-            />
-            <TagSection
-              kind="organize"
-              items={d.tags.filter((t) => t.kind !== "dispatch")}
-              options={tags.filter((t) => t.kind !== "dispatch")}
-              act={act}
-            />
-
-            {d.extra && Object.keys(d.extra).length > 0 && (
-              <section className="rounded-[var(--radius-card)] bg-surface p-4">
-                <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">
-                  Campos importados
-                </h3>
-                <dl className="space-y-1.5 text-[14px]">
-                  {Object.entries(d.extra).map(([k, v]) => (
-                    <div key={k} className="flex gap-2">
-                      <dt className="w-40 shrink-0 text-ink-2">{k}</dt>
-                      <dd className="min-w-0 break-words">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-            )}
-
-            <section className="rounded-[var(--radius-card)] bg-surface p-4">
-              <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">Histórico</h3>
-              <form
-                className="mb-3 flex gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (await act({ action: "note", text: note })) setNote("");
-                }}
-              >
-                <Input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Escrever uma anotação"
-                  className="h-9"
-                  aria-label="Anotação"
-                />
-                <Button size="sm" variant="secondary" disabled={!note.trim()}>
-                  Anotar
+                <Field label="Descrição">
+                  <textarea
+                    name="description"
+                    defaultValue={d.description ?? ""}
+                    rows={3}
+                    maxLength={4000}
+                    className="w-full rounded-xl bg-fill px-3.5 py-2.5 text-[15px] outline-none focus:bg-surface focus:shadow-[0_0_0_4px_var(--accent-soft)]"
+                  />
+                </Field>
+                {saved && <Notice tone="ok">Salvo.</Notice>}
+                <Button className="w-full" variant="secondary">
+                  Salvar
                 </Button>
               </form>
-              <ol className="space-y-2.5">
-                {d.events.map((e) => (
-                  <li key={e.id} className="text-[14px]">
-                    <p className={cx(e.type === "note" && "rounded-lg bg-warn-soft px-2.5 py-1.5")}>
-                      {eventText(e)}
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-ink-3">
-                      {e.actorName ?? "Sistema"} ·{" "}
-                      {new Date(e.createdAt).toLocaleString("pt-BR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            </section>
 
-            {canDelete && (
-              <div className="pb-6">
-                {confirmDel ? (
-                  <div className="space-y-2 rounded-xl bg-danger-soft p-3">
-                    <p className="text-[14px] text-danger">
-                      Excluir a negociação #{d.number}? O contato e as conversas continuam.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={async () => {
-                          if (await act({ action: "delete" })) onClose();
-                        }}
-                      >
-                        Excluir de vez
-                      </Button>
-                      <Button size="sm" variant="plain" onClick={() => setConfirmDel(false)}>
-                        Cancelar
-                      </Button>
+              <TagSection
+                kind="dispatch"
+                items={d.tags.filter((t) => t.kind === "dispatch")}
+                options={tags.filter((t) => t.kind === "dispatch")}
+                act={act}
+              />
+              <TagSection
+                kind="organize"
+                items={d.tags.filter((t) => t.kind !== "dispatch")}
+                options={tags.filter((t) => t.kind !== "dispatch")}
+                act={act}
+              />
+
+              <DealSchedule key={d.conversationId ?? "sem"} conversationId={d.conversationId} />
+              <Link
+                href={`/tarefas?negociacao=${d.id}`}
+                className="flex items-center justify-between rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[15px] hover:bg-fill/60"
+              >
+                <span className="flex items-center gap-2">
+                  <ListTodo size={16} className="text-ink-2" /> Tarefas desta negociação
+                </span>
+                <span aria-hidden className="text-ink-3">
+                  ›
+                </span>
+              </Link>
+
+              {d.extra && Object.keys(d.extra).length > 0 && (
+                <section className="rounded-[var(--radius-card)] bg-surface p-4">
+                  <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">
+                    Campos importados
+                  </h3>
+                  <dl className="space-y-1.5 text-[14px]">
+                    {Object.entries(d.extra).map(([k, v]) => (
+                      <div key={k} className="flex gap-2">
+                        <dt className="w-40 shrink-0 text-ink-2">{k}</dt>
+                        <dd className="min-w-0 break-words">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+
+              <section className="rounded-[var(--radius-card)] bg-surface p-4">
+                <h3 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-3">Histórico</h3>
+                <form
+                  className="mb-3 flex gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (await act({ action: "note", text: note })) setNote("");
+                  }}
+                >
+                  <Input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Escrever uma anotação"
+                    className="h-9"
+                    aria-label="Anotação"
+                  />
+                  <Button size="sm" variant="secondary" disabled={!note.trim()}>
+                    Anotar
+                  </Button>
+                </form>
+                <ol className="space-y-2.5">
+                  {d.events.map((e) => (
+                    <li key={e.id} className="text-[14px]">
+                      <p className={cx(e.type === "note" && "rounded-lg bg-warn-soft px-2.5 py-1.5")}>
+                        {eventText(e)}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-ink-3">
+                        {e.actorName ?? "Sistema"} ·{" "}
+                        {new Date(e.createdAt).toLocaleString("pt-BR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+
+              {canDelete && (
+                <div className="pb-6">
+                  {confirmDel ? (
+                    <div className="space-y-2 rounded-xl bg-danger-soft p-3">
+                      <p className="text-[14px] text-danger">
+                        Excluir a negociação #{d.number}? O contato e as conversas continuam.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={async () => {
+                            if (await act({ action: "delete" })) onClose();
+                          }}
+                        >
+                          Excluir de vez
+                        </Button>
+                        <Button size="sm" variant="plain" onClick={() => setConfirmDel(false)}>
+                          Cancelar
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDel(true)}
-                    className="inline-flex items-center gap-1.5 text-[14px] font-medium text-danger"
-                  >
-                    <Trash2 size={15} /> Excluir negociação
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDel(true)}
+                      className="inline-flex items-center gap-1.5 text-[14px] font-medium text-danger"
+                    >
+                      <Trash2 size={15} /> Excluir negociação
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </aside>
     </div>
   );
@@ -1097,7 +1183,7 @@ function NewDeal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
             aria-label="Fechar"
           >
             <X size={18} />
@@ -1210,7 +1296,7 @@ function ImportDeals({ onClose, onDone }: { onClose: () => void; onDone: () => v
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
             aria-label="Fechar"
           >
             <X size={18} />

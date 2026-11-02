@@ -19,7 +19,7 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md" | "lg" }) {
   const sizes = {
-    sm: "h-8 px-3 text-[13px]",
+    sm: "h-9 px-3 text-[13px] md:h-8",
     md: "h-10 px-4 text-[15px]",
     lg: "h-12 px-5 text-[17px] w-full",
   };

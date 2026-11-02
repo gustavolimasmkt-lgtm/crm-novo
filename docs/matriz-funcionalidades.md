@@ -69,3 +69,5 @@ Atualizada a cada entrega. Detalhe de implementação e validação de cada item
 Itens extras da Fase 0 (infraestrutura): monorepo, CI (lint, tipos, testes, build, E2E), Dockerfile, health check, prévia visual de 4 telas (computador, celular, claro e escuro): concluídos.
 
 Menu: Início, Conversas, CRM e Contatos fixos; o resto em categorias que abrem e fecham (Dia a dia, Vendas, Automação, Anúncios, Configurações), lembradas por navegador, com a categoria da tela atual sempre aberta. No celular, a aba Mais mostra as mesmas categorias.
+
+Celular: campos com 16px (iPhone não dá zoom ao digitar); conversa acompanha o teclado (área visível real) e mantém a última mensagem à vista; qualificação e resumo da IA numa faixa só; CRM com botões em ícone, filtros em linha que desliza, quadro de uma etapa por vez com atalhos de etapa fixos no topo; lista do CRM em cartões; negociação com Etapa e Responsável no topo e cabeçalho fixo; seta nas caixas de escolha; botões pequenos maiores no toque. E2E.

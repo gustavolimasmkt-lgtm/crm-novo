@@ -216,7 +216,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
             aria-label="Fechar"
           >
             <X size={18} />
@@ -431,7 +431,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
             aria-label="Fechar"
           >
             <X size={18} />

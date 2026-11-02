@@ -80,6 +80,14 @@
   --radius-card: 16px;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  /* Sem zoom por toque duplo (deixa o toque mais rápido); o zoom de pinça continua. */
+  touch-action: manipulation;
+}
+
 html,
 body {
   background: var(--bg);
@@ -130,4 +138,24 @@ body {
 }
 .scrollbar-none {
   scrollbar-width: none;
+}
+
+/* Celular: campos com 16px para o iPhone não dar zoom ao tocar para digitar. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Seta nas caixas de escolha (sem ela parecem só um texto cinza). */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 12px;
+}
+select[multiple] {
+  background-image: none;
 }

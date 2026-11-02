@@ -96,11 +96,12 @@ export function QualifyButtons({
         type="button"
         disabled={busy}
         aria-pressed={active}
+        aria-label={label}
         title={active ? `Desmarcar ${label.toLowerCase()}` : `Marcar como ${label.toLowerCase()}`}
         onClick={() => save(active ? null : kind)}
         className={cx(
           "inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-colors disabled:opacity-50",
-          compact ? "h-7 px-2.5 text-[12px]" : "h-9 flex-1 px-3 text-[14px]",
+          compact ? "h-8 min-w-8 px-2 text-[12px] sm:h-7 sm:px-2.5" : "h-10 flex-1 px-3 text-[14px] md:h-9",
           active
             ? kind === "qualified"
               ? "bg-ok text-white"
@@ -110,7 +111,9 @@ export function QualifyButtons({
               : "bg-danger-soft text-danger",
         )}
       >
-        <Icon size={compact ? 13 : 15} /> {label}
+        <Icon size={compact ? 14 : 15} />
+        {/* Na faixa da conversa no celular fica só o ícone (economiza espaço). */}
+        <span className={cx(compact && "hidden sm:inline")}>{label}</span>
       </button>
     );
   };
@@ -132,8 +135,10 @@ export function QualifyButtons({
           disabled={busy}
           onChange={(e) => save("disqualified", e.target.value || null)}
           className={cx(
-            "rounded-full bg-fill text-ink-2 outline-none",
-            compact ? "h-7 max-w-[11rem] px-2 text-[12px]" : "h-9 w-full px-3 text-[14px]",
+            "appearance-none rounded-full bg-fill text-ink-2 outline-none",
+            compact
+              ? "h-8 max-w-[11rem] pr-7 pl-2.5 text-[12px] sm:h-7"
+              : "h-10 w-full pr-8 pl-3 text-[14px] md:h-9",
           )}
         >
           <option value="">Motivo (opcional)</option>

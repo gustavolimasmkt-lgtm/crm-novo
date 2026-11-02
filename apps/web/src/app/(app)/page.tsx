@@ -68,21 +68,26 @@ export default async function Home({
         </p>
       )}
 
-      <div className="mb-5 flex flex-wrap items-center gap-2" data-testid="filtros-painel">
-        {DASHBOARD_PERIODS.map((p) => (
-          <Link
-            key={p.id}
-            href={periodLink(p.id)}
-            className={cx(
-              "rounded-full px-3 py-1.5 text-[14px] font-medium",
-              g.period === p.id ? "bg-ink text-bg" : "bg-fill text-ink-2 hover:bg-fill-strong",
-            )}
-          >
-            {p.label}
-          </Link>
-        ))}
+      <div
+        className="mb-5 space-y-2 md:flex md:flex-wrap md:items-center md:gap-2 md:space-y-0"
+        data-testid="filtros-painel"
+      >
+        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:contents md:px-0">
+          {DASHBOARD_PERIODS.map((p) => (
+            <Link
+              key={p.id}
+              href={periodLink(p.id)}
+              className={cx(
+                "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[14px] font-medium",
+                g.period === p.id ? "bg-ink text-bg" : "bg-fill text-ink-2 hover:bg-fill-strong",
+              )}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </div>
         {g.manager && <PersonFilter people={people} value={g.userId ?? ""} period={g.period} />}
-        <span className="text-[13px] text-ink-3">Mostrando {scope}</span>
+        <span className="block text-[13px] text-ink-3 md:inline">Mostrando {scope}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="kpis">

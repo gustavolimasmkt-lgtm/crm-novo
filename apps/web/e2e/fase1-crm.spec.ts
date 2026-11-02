@@ -61,6 +61,17 @@ test("CRM: lead automático, etapas, valor, etiqueta, anotação, arrastar, nova
     timeout: 10_000,
   });
 
+  if (mobile) {
+    // Campo com 16px: o iPhone não dá zoom ao tocar para digitar.
+    await expect(page.getByLabel("Buscar negociações")).toHaveCSS("font-size", "16px");
+    // Atalho de etapa desliza o quadro até ela e volta.
+    const board = page.getByTestId("board");
+    await page.getByRole("button", { name: /^Proposta \d+$/ }).click();
+    await expect.poll(() => board.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await page.getByRole("button", { name: /^Novo lead \d+$/ }).click();
+    await expect.poll(() => board.evaluate((el) => el.scrollLeft)).toBe(0);
+  }
+
   // Abre, muda etapa, valor, etiqueta, anotação
   await novoLead.getByTestId("deal-card").filter({ hasText: "Cliente Teste" }).click();
   const panel = page.getByRole("dialog", { name: "Negociação" });

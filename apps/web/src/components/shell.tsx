@@ -250,7 +250,7 @@ export function Shell({
                       )}
                     >
                       {n.icon}
-                      <span className="truncate">{n.label}</span>
+                      <span className="min-w-0 leading-tight">{n.label}</span>
                     </Link>
                   ))}
                 </div>

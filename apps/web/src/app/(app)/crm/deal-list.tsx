@@ -207,7 +207,7 @@ export function DealList({
   }
 
   const SortHead = ({ k, children, right }: { k: string; children: string; right?: boolean }) => (
-    <th className={cx("px-2 py-2 font-medium", right && "text-right")}>
+    <th className={cx("hidden px-2 py-2 font-medium md:table-cell", right && "text-right")}>
       <button
         type="button"
         onClick={() => sortBy(k)}
@@ -220,12 +220,7 @@ export function DealList({
   );
 
   return (
-    <div className="space-y-3" data-testid="lista-crm">
-      <div className="flex items-center gap-2 sm:hidden">
-        <Button size="sm" variant="secondary" onClick={() => setShowFilters((v) => !v)}>
-          <SlidersHorizontal size={14} /> Filtros{activeFilters ? ` (${activeFilters})` : ""}
-        </Button>
-      </div>
+    <div className="flex flex-col gap-3" data-testid="lista-crm">
       <div className={cx("flex-wrap gap-2 text-[14px]", showFilters ? "flex" : "hidden sm:flex")}>
         <Select
           aria-label="Etapa"
@@ -323,7 +318,11 @@ export function DealList({
           </Button>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      {/* No celular esta linha vem primeiro, com o botão Filtros. */}
+      <div className="order-first flex items-center gap-2 sm:order-none">
+        <Button size="sm" variant="secondary" onClick={() => setShowFilters((v) => !v)} className="sm:hidden">
+          <SlidersHorizontal size={14} /> Filtros{activeFilters ? ` (${activeFilters})` : ""}
+        </Button>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[13px] text-ink-3" data-testid="lista-total">
             {data ? `${data.total} ${data.total === 1 ? "negociação" : "negociações"}` : "…"}
@@ -331,7 +330,7 @@ export function DealList({
           {canExport && (
             <a
               href={`/api/crm/lista/exportar?${query}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-fill px-3 text-[13px] font-medium hover:bg-fill-strong"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-fill px-3 text-[13px] font-medium hover:bg-fill-strong md:h-8"
             >
               <Download size={14} /> Exportar
             </a>
@@ -361,52 +360,61 @@ export function DealList({
         />
       )}
 
+      {/* No celular cada linha vira um cartão (sem rolar para o lado). */}
       <div className="overflow-x-auto rounded-[var(--radius-card)] bg-surface">
-        <table className="w-full min-w-[980px] text-[14px]">
-          <thead>
-            <tr className="border-b border-separator text-left text-[12px] uppercase tracking-wide text-ink-3">
-              <th className="w-10 px-3 py-2">
+        <table className="block w-full text-[14px] md:table md:min-w-[980px]">
+          <thead className="block md:table-header-group">
+            <tr className="flex items-center border-b border-separator text-left text-[12px] uppercase tracking-wide text-ink-3 md:table-row">
+              <th className="flex items-center gap-2 px-3 py-2 md:table-cell md:w-10">
                 <input
                   type="checkbox"
                   aria-label="Selecionar a página"
                   checked={pageAll}
                   onChange={togglePage}
-                  className="size-4 accent-[var(--accent)]"
+                  className="size-5 accent-[var(--accent)] md:size-4"
                 />
+                <span className="font-medium normal-case tracking-normal md:hidden">Selecionar todas</span>
               </th>
               <SortHead k="number">#</SortHead>
               <SortHead k="title">Negociação</SortHead>
-              <th className="px-2 py-2 font-medium">Etapa</th>
-              <th className="px-2 py-2 font-medium">Responsável</th>
+              <th className="hidden px-2 py-2 font-medium md:table-cell">Etapa</th>
+              <th className="hidden px-2 py-2 font-medium md:table-cell">Responsável</th>
               {data?.showValues && (
                 <SortHead k="value" right>
                   Valor
                 </SortHead>
               )}
-              <th className="px-2 py-2 font-medium">Fonte</th>
+              <th className="hidden px-2 py-2 font-medium md:table-cell">Fonte</th>
               <SortHead k="created">Criada</SortHead>
               <SortHead k="activity">Parada há</SortHead>
             </tr>
           </thead>
-          <tbody className="divide-y divide-separator">
+          <tbody className="block divide-y divide-separator md:table-row-group">
             {rows.map((r) => (
               <tr
                 key={r.id}
-                className={cx("cursor-pointer hover:bg-fill/50", selected.has(r.id) && "bg-accent-soft/50")}
+                className={cx(
+                  "grid cursor-pointer grid-cols-[2.75rem_minmax(0,1fr)_auto] py-1 hover:bg-fill/50 md:table-row md:py-0",
+                  selected.has(r.id) && "bg-accent-soft/50",
+                )}
                 onClick={() => onOpen(r.id)}
                 data-testid="lista-linha"
               >
-                <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()} onKeyDown={() => {}}>
+                <td
+                  className="row-span-2 px-3 py-2.5 md:table-cell"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={() => {}}
+                >
                   <input
                     type="checkbox"
                     aria-label={`Selecionar negociação ${r.number}`}
                     checked={allMatching || selected.has(r.id)}
                     onChange={() => toggle(r.id)}
-                    className="size-4 accent-[var(--accent)]"
+                    className="size-5 accent-[var(--accent)] md:size-4"
                   />
                 </td>
-                <td className="px-2 py-2.5 text-ink-3 tabular-nums">{r.number}</td>
-                <td className="max-w-[280px] px-2 py-2.5">
+                <td className="hidden px-2 py-2.5 text-ink-3 tabular-nums md:table-cell">{r.number}</td>
+                <td className="col-start-2 row-start-1 min-w-0 px-1 pt-2 md:table-cell md:max-w-[280px] md:px-2 md:py-2.5">
                   <p className="flex items-center gap-1.5 truncate font-medium">
                     <span className="truncate">{r.title}</span>
                     {r.qualification === "qualified" && (
@@ -426,7 +434,7 @@ export function DealList({
                     </p>
                   )}
                 </td>
-                <td className="px-2 py-2.5">
+                <td className="col-start-2 row-start-2 min-w-0 px-1 pb-2 text-[13px] md:table-cell md:px-2 md:py-2.5 md:text-[14px]">
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                     <span className="size-2 rounded-full" style={{ background: r.stageColor }} />
                     {r.stageName}
@@ -435,7 +443,7 @@ export function DealList({
                     <p className="truncate text-[11px] text-ink-3">{r.tagNames.join(", ")}</p>
                   )}
                 </td>
-                <td className="px-2 py-2.5">
+                <td className="hidden px-2 py-2.5 md:table-cell">
                   {r.assignedUserName ? (
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                       <Avatar name={r.assignedUserName} size={20} /> {r.assignedUserName.split(" ")[0]}
@@ -445,15 +453,17 @@ export function DealList({
                   )}
                 </td>
                 {data?.showValues && (
-                  <td className="px-2 py-2.5 text-right tabular-nums">
+                  <td className="col-start-3 row-start-1 px-3 pt-2 text-right font-medium tabular-nums md:table-cell md:px-2 md:py-2.5 md:font-normal">
                     {r.valueCents ? brl.format(r.valueCents / 100) : "–"}
                   </td>
                 )}
-                <td className="px-2 py-2.5 text-ink-2">{r.sourceName ?? "–"}</td>
-                <td className="px-2 py-2.5 tabular-nums text-ink-2">{date(r.createdAt)}</td>
+                <td className="hidden px-2 py-2.5 text-ink-2 md:table-cell">{r.sourceName ?? "–"}</td>
+                <td className="hidden px-2 py-2.5 tabular-nums text-ink-2 md:table-cell">
+                  {date(r.createdAt)}
+                </td>
                 <td
                   className={cx(
-                    "px-2 py-2.5 tabular-nums",
+                    "col-start-3 row-start-2 self-end px-3 pb-2 text-right text-[13px] tabular-nums md:table-cell md:px-2 md:py-2.5 md:text-left md:text-[14px]",
                     r.idleDays >= 7
                       ? "font-semibold text-danger"
                       : r.idleDays >= 3
@@ -467,8 +477,8 @@ export function DealList({
               </tr>
             ))}
             {data && rows.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-ink-3">
+              <tr className="block md:table-row">
+                <td colSpan={9} className="block px-4 py-10 text-center text-ink-3 md:table-cell">
                   Nenhuma negociação com esses filtros.
                 </td>
               </tr>

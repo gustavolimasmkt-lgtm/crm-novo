@@ -254,7 +254,7 @@ export function FlowEditor({
                   aria-label={`Subir passo ${i + 1}`}
                   disabled={i === 0}
                   onClick={() => move(i, -1)}
-                  className="rounded-full p-1.5 text-ink-2 hover:bg-fill disabled:opacity-30"
+                  className="rounded-full p-2 text-ink-2 md:p-1.5 hover:bg-fill disabled:opacity-30"
                 >
                   <ArrowUp size={16} />
                 </button>
@@ -263,7 +263,7 @@ export function FlowEditor({
                   aria-label={`Descer passo ${i + 1}`}
                   disabled={i === f.steps.length - 1}
                   onClick={() => move(i, 1)}
-                  className="rounded-full p-1.5 text-ink-2 hover:bg-fill disabled:opacity-30"
+                  className="rounded-full p-2 text-ink-2 md:p-1.5 hover:bg-fill disabled:opacity-30"
                 >
                   <ArrowDown size={16} />
                 </button>
@@ -271,7 +271,7 @@ export function FlowEditor({
                   type="button"
                   aria-label={`Remover passo ${i + 1}`}
                   onClick={() => setF((x) => ({ ...x, steps: x.steps.filter((_, j) => j !== i) }))}
-                  className="rounded-full p-1.5 text-ink-3 hover:bg-fill"
+                  className="rounded-full p-2 text-ink-3 md:p-1.5 hover:bg-fill"
                 >
                   <Trash2 size={16} />
                 </button>

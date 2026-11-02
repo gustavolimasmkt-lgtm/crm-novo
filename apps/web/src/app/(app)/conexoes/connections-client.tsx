@@ -305,7 +305,11 @@ function QrSheet({ id, name, onClose }: { id: string; name: string; onClose: () 
             <h2 className="text-[20px] font-semibold">Conectar {name}</h2>
             <p className="mt-1 text-[14px] text-ink-2">O código atualiza sozinho a cada poucos segundos.</p>
           </div>
-          <button onClick={close} className="rounded-full bg-fill p-1.5 text-ink-2" aria-label="Fechar">
+          <button
+            onClick={close}
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
+            aria-label="Fechar"
+          >
             <X size={18} />
           </button>
         </div>

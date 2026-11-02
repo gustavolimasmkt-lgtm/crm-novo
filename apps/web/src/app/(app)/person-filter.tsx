@@ -17,7 +17,7 @@ export function PersonFilter({
     <Select
       aria-label="Pessoa"
       value={value}
-      className="w-48"
+      className="h-10 w-full md:h-11 md:w-48"
       onChange={(e) => {
         const p = new URLSearchParams({ p: period });
         if (e.target.value) p.set("pessoa", e.target.value);

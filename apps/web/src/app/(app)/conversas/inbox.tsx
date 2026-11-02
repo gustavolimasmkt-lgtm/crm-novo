@@ -27,6 +27,7 @@ import Link from "next/link";
 import {
   createContext,
   type FormEvent,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -38,6 +39,7 @@ import { type Qualification, QualifyButtons } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
 import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime, toBrInput } from "@/lib/format";
 import { subscribeLive } from "@/lib/live";
+import { useVisualViewport } from "@/lib/viewport";
 import { mmss, useVoiceRecorder } from "@/lib/voice";
 import { DealPanel } from "../crm/board";
 
@@ -301,6 +303,7 @@ export function Inbox({
   }, [loadList, loadThread]);
 
   const noConnection = connections.length === 0;
+  useVisualViewport(!!selected);
 
   return (
     <Extras.Provider value={extras}>
@@ -331,48 +334,53 @@ export function Inbox({
                   </button>
                 </div>
               </div>
-              <div className="relative">
-                <Search
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
-                />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar nome ou número"
-                  className="h-9 pl-9"
-                  aria-label="Buscar conversas"
-                />
-              </div>
-              {pipelines.some((p) => p.stages.length) && (
-                <Select
-                  aria-label="Etapa do CRM"
-                  value={stageId}
-                  onChange={(e) => setStageId(e.target.value)}
-                  className={cx("h-9 text-[14px]", stageId && "bg-accent-soft text-accent")}
-                >
-                  <option value="">Todas as etapas do CRM</option>
-                  <option value="none">Sem negociação aberta</option>
-                  {pipelines.map((p) =>
-                    pipelines.length > 1 ? (
-                      <optgroup key={p.id} label={p.name}>
-                        {p.stages.map((st) => (
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3"
+                  />
+                  <Input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Buscar"
+                    className="h-10 pl-9 md:h-9"
+                    aria-label="Buscar conversas"
+                  />
+                </div>
+                {pipelines.some((p) => p.stages.length) && (
+                  <Select
+                    aria-label="Etapa do CRM"
+                    value={stageId}
+                    onChange={(e) => setStageId(e.target.value)}
+                    className={cx(
+                      "h-10 w-[38%] shrink-0 text-[14px] md:h-9",
+                      stageId && "bg-accent-soft text-accent",
+                    )}
+                  >
+                    <option value="">Etapa: todas</option>
+                    <option value="none">Sem negociação aberta</option>
+                    {pipelines.map((p) =>
+                      pipelines.length > 1 ? (
+                        <optgroup key={p.id} label={p.name}>
+                          {p.stages.map((st) => (
+                            <option key={st.id} value={st.id}>
+                              {st.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : (
+                        p.stages.map((st) => (
                           <option key={st.id} value={st.id}>
                             {st.name}
                           </option>
-                        ))}
-                      </optgroup>
-                    ) : (
-                      p.stages.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.name}
-                        </option>
-                      ))
-                    ),
-                  )}
-                </Select>
-              )}
-              <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist">
+                        ))
+                      ),
+                    )}
+                  </Select>
+                )}
+              </div>
+              <div className="scrollbar-none -mx-1 flex gap-1 overflow-x-auto px-1" role="tablist">
                 {FILTERS.map((f) => (
                   <button
                     key={f.id}
@@ -470,7 +478,9 @@ export function Inbox({
           <section
             className={cx(
               "min-w-0 flex-1 flex-col bg-bg md:flex md:bg-surface",
-              selected ? "fixed inset-0 z-40 flex md:static md:z-auto" : "hidden",
+              selected
+                ? "fixed inset-x-0 top-[var(--vvt,0px)] z-40 flex h-[var(--vvh,100dvh)] md:static md:z-auto md:h-auto"
+                : "hidden",
             )}
             aria-label="Conversa"
           >
@@ -577,6 +587,27 @@ function Thread({
   useEffect(() => {
     if (count) bottom.current?.scrollIntoView({ block: "end" });
   }, [count]);
+  // Teclado abriu/fechou no celular: se estava no fim, continua mostrando a última mensagem.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let atEnd = true;
+    const box = () => bottom.current?.parentElement;
+    const track = () => {
+      const b = box();
+      if (b) atEnd = b.scrollHeight - b.scrollTop - b.clientHeight < 80;
+    };
+    const onResize = () => {
+      if (atEnd) bottom.current?.scrollIntoView({ block: "end" });
+    };
+    const b = box();
+    b?.addEventListener("scroll", track, { passive: true });
+    vv.addEventListener("resize", onResize);
+    return () => {
+      b?.removeEventListener("scroll", track);
+      vv.removeEventListener("resize", onResize);
+    };
+  }, []);
 
   async function act(body: Record<string, unknown>) {
     setActionError(null);
@@ -706,19 +737,26 @@ function Thread({
         </div>
       )}
 
-      {c && thread?.deal && (
-        <div className="flex items-center gap-2 border-b border-separator px-4 py-1.5 text-[13px]">
-          <span className="shrink-0 text-ink-3">Lead:</span>
-          <QualifyButtons
-            compact
-            dealId={thread.deal.id}
-            value={thread.deal.qualification}
-            reason={thread.deal.qualificationReason}
-            onChanged={onChanged}
-          />
-        </div>
+      {c && (
+        <SummaryBar
+          conv={c}
+          onChanged={onChanged}
+          lead={
+            thread?.deal ? (
+              <>
+                <span className="shrink-0 text-ink-3">Lead:</span>
+                <QualifyButtons
+                  compact
+                  dealId={thread.deal.id}
+                  value={thread.deal.qualification}
+                  reason={thread.deal.qualificationReason}
+                  onChanged={onChanged}
+                />
+              </>
+            ) : null
+          }
+        />
       )}
-      {c && <SummaryBar conv={c} onChanged={onChanged} />}
 
       {actionError && (
         <div className="px-4 pt-3">
@@ -726,7 +764,10 @@ function Thread({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 py-4 md:px-6" data-testid="thread-messages">
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 md:px-6"
+        data-testid="thread-messages"
+      >
         {c && thread?.messages.length === 0 && (
           <p className="mt-10 text-center text-[14px] text-ink-3">
             Nenhuma mensagem ainda. Mande a primeira.
@@ -883,13 +924,14 @@ const TEMP: Record<LeadSummary["temperatura"], { label: string; cls: string }> =
   frio: { label: "Frio", cls: "bg-fill text-ink-2" },
 };
 
-function SummaryBar({ conv, onChanged }: { conv: Conv; onChanged: () => void }) {
+/** Faixa abaixo do cabeçalho: qualificação do lead e resumo da IA na mesma linha. */
+function SummaryBar({ conv, onChanged, lead }: { conv: Conv; onChanged: () => void; lead: ReactNode }) {
   const { aiEnabled } = useContext(Extras);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const s = conv.aiSummary;
-  if (!aiEnabled && !s) return null;
+  if (!aiEnabled && !s && !lead) return null;
   async function run() {
     setBusy(true);
     setErr(null);
@@ -904,9 +946,13 @@ function SummaryBar({ conv, onChanged }: { conv: Conv; onChanged: () => void }) 
     }
   }
   return (
-    <div className="border-b border-separator px-4 py-1.5 text-[13px]" data-testid="resumo-ia">
+    <div className="border-b border-separator px-3 py-1.5 text-[13px] md:px-4" data-testid="resumo-ia">
       <div className="flex items-center gap-2">
-        {s ? (
+        {lead && <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">{lead}</div>}
+        {lead && (aiEnabled || s) && <span className="h-5 w-px shrink-0 bg-separator" />}
+        {!aiEnabled && !s ? (
+          <span className="flex-1" />
+        ) : s ? (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -923,10 +969,15 @@ function SummaryBar({ conv, onChanged }: { conv: Conv; onChanged: () => void }) 
             <span className="truncate text-ink-2">{s.interesse ?? s.resumo}</span>
           </button>
         ) : (
-          <span className="flex-1 text-ink-3">Sem resumo da IA</span>
+          <span className={cx("flex-1 text-ink-3", !!lead && "invisible sm:visible")}>Sem resumo da IA</span>
         )}
         {aiEnabled && (
-          <button type="button" disabled={busy} onClick={run} className="shrink-0 font-semibold text-accent">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={run}
+            className="-my-1 shrink-0 py-1.5 font-semibold text-accent"
+          >
             {busy ? "Resumindo..." : s ? "Atualizar" : "Resumir com IA"}
           </button>
         )}
@@ -1820,7 +1871,7 @@ function NewConversation({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-fill p-1.5 text-ink-2"
+            className="rounded-full bg-fill p-2 text-ink-2 md:p-1.5"
             aria-label="Fechar"
           >
             <X size={18} />
