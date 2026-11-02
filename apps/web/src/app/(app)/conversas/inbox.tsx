@@ -99,7 +99,7 @@ const Extras = createContext<{
   quickReplies: QuickReply[];
   sttEnabled: boolean;
   aiEnabled: boolean;
-  flows?: { id: string; name: string }[];
+  flows?: { id: string; name: string; active?: boolean }[];
 }>({
   quickReplies: [],
   sttEnabled: false,
@@ -206,7 +206,7 @@ export function Inbox({
   quickReplies?: QuickReply[];
   sttEnabled?: boolean;
   aiEnabled?: boolean;
-  flows?: { id: string; name: string }[];
+  flows?: { id: string; name: string; active?: boolean }[];
   pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[];
 }) {
   const extras = useMemo(
@@ -1389,10 +1389,14 @@ function Composer({
             <li key={f.id}>
               <button
                 type="button"
+                disabled={f.active === false}
                 onClick={() => startFlow(f.id)}
-                className="block w-full rounded-xl px-3 py-2 text-left text-[14px] hover:bg-fill"
+                className="block w-full rounded-xl px-3 py-2 text-left text-[14px] hover:bg-fill disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 {f.name}
+                {f.active === false && (
+                  <span className="block text-[12px] text-ink-3">Desligado: ligue em Fluxos para usar</span>
+                )}
               </button>
             </li>
           ))}

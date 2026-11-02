@@ -20,6 +20,7 @@ import { z } from "zod";
 import { type Actor, can } from "../auth/permissions.js";
 import type { EvolutionApi } from "../whatsapp/evolution.js";
 import { conversationFor, getFollowupSettings, inWindow, reserveAutomatedSend } from "./automations.js";
+import { audienceContacts } from "./campaigns.js";
 import { getConversation, sendAiMessage } from "./conversations.js";
 import { AppError } from "./errors.js";
 import { notifyOrg } from "./events.js";
@@ -252,6 +253,54 @@ export async function startFlow(
   return r.id;
 }
 
+/**
+ * Disparo: põe o fluxo para todo o público (etapa, etiqueta, sem conversa há X dias). Cada cliente recebe
+ * os passos seguidos, mas um cliente por vez pela fila anti-bloqueio e só no horário de envio.
+ * Quem já está nesse fluxo, quem pediu SAIR e a equipe ficam de fora.
+ */
+export async function dispatchFlow(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  flowId: string,
+  filter: Parameters<typeof audienceContacts>[2],
+) {
+  if (!can(actor, "settings.manage"))
+    throw new AppError("forbidden", "Só administradores e gestores fazem disparos.");
+  const f = await ownFlow(db, organizationId, flowId);
+  if (!f.active) throw new AppError("validation", "Ligue o fluxo antes de disparar.");
+  if (!f.steps.some((s) => s.type === "message" || s.type === "media"))
+    throw new AppError("validation", "Esse fluxo não tem mensagem para enviar.");
+  const { ids, capped } = await audienceContacts(db, organizationId, filter);
+  if (!ids.length) throw new AppError("validation", "Nenhum contato nesse público.");
+  if (capped) throw new AppError("validation", "Público grande demais. Filtre mais.");
+  const batch = crypto.randomUUID();
+  let queued = 0;
+  for (const contactId of ids) {
+    const [deal] = await db
+      .select({ id: deals.id })
+      .from(deals)
+      .innerJoin(pipelineStages, eq(pipelineStages.id, deals.stageId))
+      .where(and(eq(deals.contactId, contactId), sql`${pipelineStages.kind} not in ('won','lost')`))
+      .orderBy(desc(deals.updatedAt))
+      .limit(1);
+    const r = await db
+      .insert(flowRuns)
+      .values({
+        organizationId,
+        flowId: f.id,
+        contactId,
+        dealId: deal?.id ?? null,
+        triggerKey: `disparo:${batch}:${contactId}`,
+        startedByUserId: actor.userId,
+      })
+      .onConflictDoNothing()
+      .returning({ id: flowRuns.id });
+    if (r.length) queued++;
+  }
+  return { total: ids.length, queued, skipped: ids.length - queued };
+}
+
 export async function stopRun(db: Database, actor: ActorU, organizationId: string, runId: string) {
   if (!uuid.test(runId)) throw new AppError("not_found", "Execução não encontrada.");
   const run = await db.query.flowRuns.findFirst({
@@ -441,6 +490,8 @@ export async function processFlows(
     let sent = 0;
     // Enviado por alguém na conversa: sai na hora, em sequência (é atendimento, não disparo).
     const manual = run.triggerKey.startsWith("manual:");
+    // Disparo: um cliente por vez na fila anti-bloqueio, mas os passos dele saem seguidos.
+    const bulk = run.triggerKey.startsWith("disparo:");
     try {
       for (let guard = 0; guard < 10; guard++) {
         const reason = await stopReasonFor(db, run, flow);
@@ -460,7 +511,7 @@ export async function processFlows(
         }
         if (s.type === "message" || s.type === "media") {
           // Automático: uma mensagem por ciclo pela fila anti-bloqueio. Manual: até 10 em sequência.
-          if (sent && !manual) break;
+          if (sent && !manual && !bulk) break;
           if (sent >= 10) break;
           const contact = await db.query.contacts.findFirst({ where: eq(contacts.id, run.contactId) });
           const deal = run.dealId
@@ -470,7 +521,7 @@ export async function processFlows(
           const convId = await conversationFor(db, run.organizationId, contact, deal?.connectionId ?? null);
           const conv = await db.query.conversations.findFirst({ where: eq(conversations.id, convId) });
           if (!conv) throw new Error("conversa não encontrada");
-          if (!manual) {
+          if (!manual && !sent) {
             const pace = await getFollowupSettings(db, run.organizationId);
             if (!inWindow(pace)) {
               nextAt = new Date(Date.now() + 15 * 60_000);

@@ -41,7 +41,10 @@ export default async function ConversationsPage({ searchParams }: { searchParams
       quickReplies={quickReplies}
       sttEnabled={Boolean(process.env.TRANSCRIBE_API_KEY)}
       aiEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
-      flows={flowList.filter((f) => f.active).map((f) => ({ id: f.id, name: f.name }))}
+      flows={flowList
+        .filter((f) => f.trigger === "manual" || f.active)
+        .sort((a, b) => Number(b.active) - Number(a.active))
+        .map((f) => ({ id: f.id, name: f.name, active: f.active }))}
       pipelines={pipes.map((p) => ({
         id: p.id,
         name: p.name,

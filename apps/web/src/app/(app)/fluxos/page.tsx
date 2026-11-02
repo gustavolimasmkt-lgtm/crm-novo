@@ -1,4 +1,4 @@
-import { listFlows, listPipelines, listTags, waitLabel } from "@crm/core";
+import { getFollowupSettings, listFlows, listPipelines, listTags, waitLabel } from "@crm/core";
 import { getDb } from "@crm/db";
 import Link from "next/link";
 import { Button, PageHeader } from "@/components/ui";
@@ -18,11 +18,18 @@ const TRIGGER: Record<string, string> = {
 export default async function FlowsPage() {
   const ctx = await requirePermission("settings.manage");
   const db = getDb();
-  const [items, pipelines, tagList] = await Promise.all([
+  const [items, pipelines, tagList, pace] = await Promise.all([
     listFlows(db, ctx.organization.id),
     listPipelines(db, ctx.organization.id),
     listTags(db, ctx.organization.id),
+    getFollowupSettings(db, ctx.organization.id),
   ]);
+  const tagOpts = tagList.map((t) => ({ id: t.id, name: t.name }));
+  const stageOpts = pipelines.flatMap((p) =>
+    p.stages
+      .filter((s) => s.kind !== "won" && s.kind !== "lost")
+      .map((s) => ({ id: s.id, name: pipelines.length > 1 ? `${p.name}: ${s.name}` : s.name })),
+  );
   const stageName = (id: string | null) =>
     pipelines.flatMap((p) => p.stages).find((s) => s.id === id)?.name ?? "?";
   const tagName = (id: string | null) => tagList.find((t) => t.id === id)?.name ?? "?";
@@ -61,6 +68,9 @@ export default async function FlowsPage() {
             return (
               <FlowRow
                 key={f.id}
+                tags={tagOpts}
+                stages={stageOpts}
+                dailyLimit={pace.dailyLimit}
                 flow={{
                   id: f.id,
                   name: f.name,

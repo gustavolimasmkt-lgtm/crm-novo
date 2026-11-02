@@ -64,6 +64,20 @@ function audienceSql(organizationId: string, f: CampaignFilter) {
     limit ${MAX_CAMPAIGN_RECIPIENTS + 1}`;
 }
 
+/** Contatos do público (ids), para disparo de fluxo. */
+export async function audienceContacts(
+  db: Database,
+  organizationId: string,
+  raw: z.input<typeof campaignFilterInput>,
+) {
+  const f = campaignFilterInput.parse(raw);
+  const rows = await db.execute<{ id: string; name: string | null }>(audienceSql(organizationId, f));
+  return {
+    ids: rows.slice(0, MAX_CAMPAIGN_RECIPIENTS).map((r) => r.id),
+    capped: rows.length > MAX_CAMPAIGN_RECIPIENTS,
+  };
+}
+
 export async function previewAudience(
   db: Database,
   actor: ActorU,

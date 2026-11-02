@@ -14,10 +14,12 @@ import {
   createConnection,
   createEvolutionClient,
   createOrganization,
+  dispatchFlow,
   handleEvolutionWebhook,
   listContactRuns,
   listConversations,
   listFlows,
+  listTags,
   listUpcoming,
   moveDeal,
   processFlows,
@@ -259,6 +261,54 @@ describe("fluxos", () => {
     expect(runs2).toHaveLength(0);
     await moveDeal(db, admin, org.id, deal?.id ?? "", won?.id ?? "");
     void conversations;
+  });
+
+  it("disparo por etiqueta: um cliente por vez na fila, passos dele seguidos, sem repetir", async () => {
+    const { org, admin, say, tick, texts } = await setup();
+    await say("oi", "5548999990001");
+    await say("olá", "5548999990002");
+    await say("bom dia", "5548999990003");
+    const ds = await db.select().from(deals).orderBy(deals.number);
+    await setDealTags(db, admin, org.id, ds[0]?.id ?? "", ["Feirão"]);
+    await setDealTags(db, admin, org.id, ds[1]?.id ?? "", ["Feirão"]);
+    const tag = (await listTags(db, org.id)).find((t) => t.name === "Feirão");
+    const fid = await saveFlow(db, admin, org.id, null, {
+      name: "Feirão",
+      trigger: "manual",
+      steps: [
+        { type: "message", text: "#periodo-dia, {nome}! Feirão sábado." },
+        { type: "message", text: "Tem condição especial pra você." },
+      ],
+    });
+    await expect(dispatchFlow(db, admin, org.id, fid ?? "", { tagIds: [tag?.id ?? ""] })).rejects.toThrow(
+      /Ligue o fluxo/,
+    );
+    await setFlowActive(db, admin, org.id, fid ?? "", true);
+    await expect(
+      dispatchFlow(db, { ...admin, role: "seller" }, org.id, fid ?? "", { tagIds: [tag?.id ?? ""] }),
+    ).rejects.toThrow(/gestores/);
+    expect(await dispatchFlow(db, admin, org.id, fid ?? "", { tagIds: [tag?.id ?? ""] })).toEqual({
+      total: 2,
+      queued: 2,
+      skipped: 0,
+    });
+    // De novo enquanto rodam: ninguém recebe duas vezes.
+    expect(await dispatchFlow(db, admin, org.id, fid ?? "", { tagIds: [tag?.id ?? ""] })).toMatchObject({
+      queued: 0,
+      skipped: 2,
+    });
+    fake.sent.length = 0;
+    await db.update(whatsappConnections).set({ nextAutomatedAt: null });
+    await processFlows(db, evo);
+    // Um cliente nesta rodada (o anti-bloqueio segura o outro), com as duas mensagens seguidas.
+    expect(texts()).toHaveLength(2);
+    expect(texts()[0]).toMatch(/^(Bom dia|Boa tarde|Boa noite), Joana! Feirão sábado\.$/);
+    expect(texts()[1]).toBe("Tem condição especial pra você.");
+    await tick();
+    expect(texts()).toHaveLength(4);
+    const to = new Set(fake.sent.map((x) => x.to));
+    expect(to.size).toBe(2);
+    expect([...to].some((t) => t.includes("5548999990003"))).toBe(false);
   });
 
   it("botão na conversa: texto, áudio e vídeo do carro saem na hora, em sequência, e a IA pausa", async () => {

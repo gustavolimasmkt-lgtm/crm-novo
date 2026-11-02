@@ -126,4 +126,22 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await item.getByRole("button", { name: "Parar" }).click();
   await expect(page.getByText("Nada programado")).toBeVisible();
   await page.screenshot({ path: `test-results/fluxos-${testInfo.project.name}.png`, fullPage: true });
+
+  // Disparo para quem tem a etiqueta "Feirão".
+  await page.goto("/crm");
+  await page.getByTestId("deal-card").filter({ hasText: "Cliente Teste" }).first().click();
+  const panel = page.getByRole("dialog", { name: "Negociação" });
+  await panel.getByLabel("Adicionar etiqueta").fill("Feirão");
+  await panel.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await expect(panel.getByText("Feirão").first()).toBeVisible();
+  await page.goto("/fluxos");
+  const flowRow = page.getByTestId("fluxo").filter({ hasText: "Reaquecer cliente" });
+  await flowRow.getByRole("button", { name: "Disparar" }).click();
+  const disparo = flowRow.getByTestId("disparo");
+  await disparo.locator("label", { hasText: "Feirão" }).click();
+  await expect(disparo.getByTestId("publico-disparo")).toContainText("1 cliente(s)");
+  await disparo.getByRole("button", { name: "Disparar para 1" }).click();
+  await expect(disparo).toContainText("1 cliente(s) na fila do disparo");
+  await page.goto("/agendadas");
+  await expect(page.getByTestId("programada").filter({ hasText: "Cliente Teste" })).toContainText("Fluxo");
 });

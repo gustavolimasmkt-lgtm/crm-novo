@@ -4,10 +4,17 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { deleteFlowAction, setFlowActiveAction } from "@/app/actions/flows";
 import { Badge, Button, Notice } from "@/components/ui";
+import { DispatchPanel } from "./dispatch";
 
 export function FlowRow({
   flow,
+  tags,
+  stages,
+  dailyLimit,
 }: {
+  tags: { id: string; name: string }[];
+  stages: { id: string; name: string }[];
+  dailyLimit: number;
   flow: {
     id: string;
     name: string;
@@ -20,6 +27,7 @@ export function FlowRow({
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false);
   const run = (fn: () => Promise<{ error?: string } | object>) =>
     start(async () => {
       setError(null);
@@ -38,6 +46,11 @@ export function FlowRow({
         </div>
         <div className="flex items-center gap-2">
           <Badge tone={flow.active ? "ok" : "neutral"}>{flow.active ? "Ligado" : "Desligado"}</Badge>
+          {flow.active && (
+            <Button size="sm" onClick={() => setDispatching((v) => !v)}>
+              Disparar
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -61,6 +74,16 @@ export function FlowRow({
           </Button>
         </div>
       </div>
+      {dispatching && (
+        <DispatchPanel
+          flowId={flow.id}
+          flowName={flow.name}
+          tags={tags}
+          stages={stages}
+          dailyLimit={dailyLimit}
+          onClose={() => setDispatching(false)}
+        />
+      )}
       {error && (
         <div className="mt-2">
           <Notice>{error}</Notice>
