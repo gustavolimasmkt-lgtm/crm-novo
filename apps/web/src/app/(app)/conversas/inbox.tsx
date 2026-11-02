@@ -10,11 +10,14 @@ import {
   FileText,
   MapPin,
   MessageSquarePlus,
+  Mic,
   MoreHorizontal,
   Paperclip,
+  Plus,
   Search,
   SendHorizontal,
   StickyNote,
+  Trash2,
   User,
   Workflow,
   X,
@@ -33,8 +36,9 @@ import {
 } from "react";
 import { type Qualification, QualifyButtons } from "@/components/qualify";
 import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/components/ui";
-import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime } from "@/lib/format";
+import { contactLabel, dayKey, dayLabel, formatPhone, listTime, messageTime, toBrInput } from "@/lib/format";
 import { subscribeLive } from "@/lib/live";
+import { mmss, useVoiceRecorder } from "@/lib/voice";
 
 type Filter = "open" | "unread" | "mine" | "closed" | "all";
 type Conv = {
@@ -189,6 +193,7 @@ export function Inbox({
   sttEnabled = false,
   aiEnabled = false,
   flows = [],
+  pipelines = [],
 }: {
   initial: Conv[];
   initialSelected: string | null;
@@ -202,6 +207,7 @@ export function Inbox({
   sttEnabled?: boolean;
   aiEnabled?: boolean;
   flows?: { id: string; name: string }[];
+  pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[];
 }) {
   const extras = useMemo(
     () => ({ quickReplies, sttEnabled, aiEnabled, flows }),
@@ -209,6 +215,7 @@ export function Inbox({
   );
   const [filter, setFilter] = useState<Filter>("open");
   const [q, setQ] = useState("");
+  const [stageId, setStageId] = useState("");
   const [list, setList] = useState<Conv[]>(initial);
   const [selected, setSelected] = useState<string | null>(initialSelected);
   const [thread, setThread] = useState<ThreadData | null>(null);
@@ -218,15 +225,19 @@ export function Inbox({
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
+  const listReq = useRef(0);
   const loadList = useCallback(async () => {
     const p = new URLSearchParams({ filter });
     if (q.trim()) p.set("q", q.trim());
+    if (stageId) p.set("etapa", stageId);
+    const reqId = ++listReq.current;
     try {
-      setList(await api<Conv[]>(`/api/conversas?${p}`));
+      const l = await api<Conv[]>(`/api/conversas?${p}`);
+      if (reqId === listReq.current) setList(l);
     } catch {
       // mantém a lista anterior
     }
-  }, [filter, q]);
+  }, [filter, q, stageId]);
 
   const loadThread = useCallback(async (id: string) => {
     try {
@@ -321,6 +332,34 @@ export function Inbox({
                   aria-label="Buscar conversas"
                 />
               </div>
+              {pipelines.some((p) => p.stages.length) && (
+                <Select
+                  aria-label="Etapa do CRM"
+                  value={stageId}
+                  onChange={(e) => setStageId(e.target.value)}
+                  className={cx("h-9 text-[14px]", stageId && "bg-accent-soft text-accent")}
+                >
+                  <option value="">Todas as etapas do CRM</option>
+                  <option value="none">Sem negociação aberta</option>
+                  {pipelines.map((p) =>
+                    pipelines.length > 1 ? (
+                      <optgroup key={p.id} label={p.name}>
+                        {p.stages.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : (
+                      p.stages.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.name}
+                        </option>
+                      ))
+                    ),
+                  )}
+                </Select>
+              )}
               <div className="-mx-1 flex gap-1 overflow-x-auto px-1" role="tablist">
                 {FILTERS.map((f) => (
                   <button
@@ -1143,6 +1182,9 @@ function Composer({
   }, [replyTo]);
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState(false);
+  const [more, setMore] = useState(false);
+  const [editingSched, setEditingSched] = useState<Scheduled | null>(null);
+  const voice = useVoiceRecorder();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState(0);
@@ -1183,8 +1225,14 @@ function Composer({
         await api(`/api/conversas/${id}/notas`, json({ text }));
       } else if (scheduleAt !== null) {
         if (!scheduleAt) throw new Error("Escolha dia e hora para agendar.");
-        await api(`/api/conversas/${id}/agendar`, json({ text, sendAt: scheduleAt }));
+        if (editingSched)
+          await api(`/api/agendadas/${editingSched.id}`, {
+            ...json({ text, sendAt: scheduleAt }),
+            method: "PATCH",
+          });
+        else await api(`/api/conversas/${id}/agendar`, json({ text, sendAt: scheduleAt }));
         setScheduleAt(null);
+        setEditingSched(null);
       } else {
         const fd = new FormData();
         if (text.trim()) fd.set("text", text);
@@ -1204,6 +1252,36 @@ function Composer({
       areaRef.current?.focus();
     }
   }
+
+  async function sendVoice() {
+    const f = await voice.stop();
+    if (!f) return;
+    setSending(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", f);
+      if (replyTo) fd.set("replyTo", replyTo.id);
+      await api(`/api/conversas/${id}/mensagens`, { method: "POST", body: fd });
+      if (replyTo) onCancel();
+      onSent();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSending(false);
+    }
+  }
+  const startSchedule = () => {
+    setNote(false);
+    setEditingSched(null);
+    setScheduleAt((v) => (v === null ? "" : null));
+  };
+  const toggleNote = () => {
+    setNote((v) => !v);
+    setScheduleAt(null);
+    setEditingSched(null);
+  };
+  const showMic = !text.trim() && !file && !note && !editing && scheduleAt === null;
 
   return (
     <form
@@ -1248,6 +1326,19 @@ function Composer({
               <Clock size={14} className="shrink-0 text-ink-2" />
               <span className="shrink-0 font-medium">{whenFmt.format(new Date(sm.sendAt))}</span>
               <span className="min-w-0 flex-1 truncate text-ink-2">{sm.body}</span>
+              <button
+                type="button"
+                className="shrink-0 font-semibold text-accent"
+                onClick={() => {
+                  setNote(false);
+                  setEditingSched(sm);
+                  setText(sm.body);
+                  setScheduleAt(toBrInput(sm.sendAt));
+                  areaRef.current?.focus();
+                }}
+              >
+                Editar
+              </button>
               <button
                 type="button"
                 className="shrink-0 font-semibold text-danger"
@@ -1329,7 +1420,7 @@ function Composer({
       {scheduleAt !== null && !editing && (
         <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-accent-soft px-3 py-1.5 text-[13px] text-accent">
           <Clock size={14} />
-          <span className="font-medium">Agendar para</span>
+          <span className="font-medium">{editingSched ? "Editando, sai em" : "Agendar para"}</span>
           <input
             type="datetime-local"
             value={scheduleAt}
@@ -1337,14 +1428,30 @@ function Composer({
             aria-label="Agendar para"
             className="rounded-lg bg-surface px-2 py-1 text-ink"
           />
-          <button type="button" onClick={() => setScheduleAt(null)} className="ml-auto font-semibold">
+          <button
+            type="button"
+            onClick={() => {
+              setScheduleAt(null);
+              if (editingSched) {
+                setEditingSched(null);
+                setText("");
+              }
+            }}
+            className="ml-auto font-semibold"
+          >
             Cancelar
           </button>
+          <span className="w-full text-[12px] text-accent/80">
+            Dica: #periodo-dia vira bom dia, boa tarde ou boa noite na hora do envio.
+          </span>
         </div>
       )}
       {note && (
         <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-warn">
           <StickyNote size={12} /> Nota interna: só a equipe vê, não vai para o cliente.
+          <button type="button" onClick={toggleNote} className="ml-auto font-semibold">
+            Sair
+          </button>
         </p>
       )}
       {file && !note && (
@@ -1364,148 +1471,251 @@ function Composer({
           </button>
         </div>
       )}
-      <div className="flex items-end gap-1.5">
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          data-testid="file-input"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        {!note && !editing && scheduleAt === null && (
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="mb-1 rounded-full p-2 text-ink-2 hover:bg-fill"
-            aria-label="Anexar arquivo"
-          >
-            <Paperclip size={20} />
-          </button>
-        )}
-        {!editing && !note && !file && (
-          <button
-            type="button"
-            onClick={() => setScheduleAt((v) => (v === null ? "" : null))}
-            aria-pressed={scheduleAt !== null}
-            aria-label="Agendar mensagem"
-            title="Agendar mensagem"
-            className={cx(
-              "mb-1 rounded-full p-2 hover:bg-fill",
-              scheduleAt !== null ? "bg-accent-soft text-accent" : "text-ink-2",
-            )}
-          >
-            <Clock size={20} />
-          </button>
-        )}
-        {!editing && (
-          <button
-            type="button"
-            onClick={() => {
-              setNote((v) => !v);
-              setScheduleAt(null);
-            }}
-            aria-pressed={note}
-            aria-label="Nota interna"
-            title="Nota interna"
-            className={cx(
-              "mb-1 rounded-full p-2 hover:bg-fill",
-              note ? "bg-warn-soft text-warn" : "text-ink-2",
-            )}
-          >
-            <StickyNote size={20} />
-          </button>
-        )}
-        {!note && !editing && flows.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setFlowMenu((v) => !v)}
-            aria-label="Enviar fluxo"
-            title="Enviar fluxo"
-            className={cx(
-              "mb-1 rounded-full p-2 hover:bg-fill",
-              flowMenu ? "bg-accent-soft text-accent" : "text-ink-2",
-            )}
-          >
-            <Workflow size={20} />
-          </button>
-        )}
-        {!note && !editing && quickReplies.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setText("/");
-              areaRef.current?.focus();
-            }}
-            aria-label="Respostas rápidas"
-            title="Respostas rápidas (/)"
-            className="mb-1 hidden rounded-full p-2 text-ink-2 hover:bg-fill sm:block"
-          >
-            <Zap size={20} />
-          </button>
-        )}
-        <textarea
-          ref={areaRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setPick(0);
-          }}
-          onKeyDown={(e) => {
-            if (matches.length) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                setPick((p) => (p + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
-                return;
-              }
-              if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
-                e.preventDefault();
-                const r = matches[pick];
-                if (r) choose(r);
-                return;
-              }
-              if (e.key === "Escape") {
-                setText("");
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          rows={1}
-          placeholder={
-            note ? "Nota para a equipe" : file ? "Legenda (opcional)" : "Mensagem ou / para respostas rápidas"
-          }
-          aria-label={note ? "Nota interna" : "Mensagem"}
-          className={cx(
-            "max-h-40 min-h-10 flex-1 resize-none rounded-[20px] border bg-surface px-4 py-2 text-[15px] outline-none",
-            note ? "border-warn/40 focus:border-warn" : "border-separator focus:border-accent",
-          )}
-          style={{ fieldSizing: "content" } as React.CSSProperties}
-        />
-        <button
-          type="submit"
-          disabled={sending || (!text.trim() && !file)}
-          className={cx(
-            "mb-0.5 flex h-9 w-9 items-center justify-center rounded-full text-white transition disabled:opacity-30",
-            note ? "bg-warn" : "bg-accent",
-          )}
-          aria-label={
-            note ? "Salvar nota" : editing ? "Salvar edição" : scheduleAt !== null ? "Agendar" : "Enviar"
-          }
+      <input
+        ref={fileRef}
+        type="file"
+        className="hidden"
+        data-testid="file-input"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+      {voice.error && (
+        <div className="mb-2">
+          <Notice>{voice.error}</Notice>
+        </div>
+      )}
+      {more && (
+        <ul
+          aria-label="Mais opções"
+          className="absolute right-3 bottom-full left-3 mb-2 overflow-hidden rounded-2xl bg-surface p-1 shadow-lg ring-1 ring-separator md:hidden"
         >
-          {note ? (
-            <StickyNote size={16} />
-          ) : scheduleAt !== null ? (
-            <Clock size={16} />
-          ) : editing ? (
-            <Check size={16} />
-          ) : (
-            <SendHorizontal size={18} />
+          {[
+            { label: "Foto, vídeo ou arquivo", icon: Paperclip, run: () => fileRef.current?.click() },
+            { label: "Agendar mensagem", icon: Clock, run: startSchedule },
+            { label: "Nota interna", icon: StickyNote, run: toggleNote },
+            ...(flows.length
+              ? [{ label: "Enviar fluxo", icon: Workflow, run: () => setFlowMenu(true) }]
+              : []),
+            ...(quickReplies.length
+              ? [
+                  {
+                    label: "Respostas rápidas",
+                    icon: Zap,
+                    run: () => {
+                      setText("/");
+                      areaRef.current?.focus();
+                    },
+                  },
+                ]
+              : []),
+          ].map((o) => (
+            <li key={o.label}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMore(false);
+                  o.run();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[16px] hover:bg-fill"
+              >
+                <o.icon size={20} className="text-accent" /> {o.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {voice.recording ? (
+        <div className="flex items-center gap-2" data-testid="gravando">
+          <button
+            type="button"
+            onClick={voice.cancel}
+            aria-label="Descartar áudio"
+            className="rounded-full p-2.5 text-danger hover:bg-danger-soft"
+          >
+            <Trash2 size={22} />
+          </button>
+          <div className="flex h-11 flex-1 items-center gap-2 rounded-full bg-fill px-4 text-[15px]">
+            <span className="size-2.5 animate-pulse rounded-full bg-danger" />
+            <span className="tabular-nums">{mmss(voice.seconds)}</span>
+            <span className="truncate text-ink-3">Gravando áudio…</span>
+          </div>
+          <button
+            type="button"
+            onClick={sendVoice}
+            aria-label="Enviar áudio"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white"
+          >
+            <SendHorizontal size={20} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-end gap-1.5">
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => setMore((v) => !v)}
+              aria-label="Mais opções"
+              aria-expanded={more}
+              className={cx(
+                "mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:hidden",
+                more ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-fill",
+              )}
+            >
+              <Plus size={24} />
+            </button>
           )}
-        </button>
-      </div>
+          <div className="hidden items-end gap-1.5 md:flex">
+            {!note && !editing && scheduleAt === null && (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="mb-1 rounded-full p-2 text-ink-2 hover:bg-fill"
+                aria-label="Anexar arquivo"
+              >
+                <Paperclip size={20} />
+              </button>
+            )}
+            {!editing && !note && !file && (
+              <button
+                type="button"
+                onClick={startSchedule}
+                aria-pressed={scheduleAt !== null}
+                aria-label="Agendar mensagem"
+                title="Agendar mensagem"
+                className={cx(
+                  "mb-1 rounded-full p-2 hover:bg-fill",
+                  scheduleAt !== null ? "bg-accent-soft text-accent" : "text-ink-2",
+                )}
+              >
+                <Clock size={20} />
+              </button>
+            )}
+            {!editing && (
+              <button
+                type="button"
+                onClick={toggleNote}
+                aria-pressed={note}
+                aria-label="Nota interna"
+                title="Nota interna"
+                className={cx(
+                  "mb-1 rounded-full p-2 hover:bg-fill",
+                  note ? "bg-warn-soft text-warn" : "text-ink-2",
+                )}
+              >
+                <StickyNote size={20} />
+              </button>
+            )}
+            {!note && !editing && flows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFlowMenu((v) => !v)}
+                aria-label="Enviar fluxo"
+                title="Enviar fluxo"
+                className={cx(
+                  "mb-1 rounded-full p-2 hover:bg-fill",
+                  flowMenu ? "bg-accent-soft text-accent" : "text-ink-2",
+                )}
+              >
+                <Workflow size={20} />
+              </button>
+            )}
+            {!note && !editing && quickReplies.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setText("/");
+                  areaRef.current?.focus();
+                }}
+                aria-label="Respostas rápidas"
+                title="Respostas rápidas (/)"
+                className="mb-1 rounded-full p-2 text-ink-2 hover:bg-fill"
+              >
+                <Zap size={20} />
+              </button>
+            )}
+          </div>
+          <textarea
+            ref={areaRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPick(0);
+            }}
+            onKeyDown={(e) => {
+              if (matches.length) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setPick((p) => (p + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+                  return;
+                }
+                if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+                  e.preventDefault();
+                  const r = matches[pick];
+                  if (r) choose(r);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  setText("");
+                  return;
+                }
+              }
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            rows={1}
+            placeholder={note ? "Nota para a equipe" : file ? "Legenda (opcional)" : "Mensagem (/ atalhos)"}
+            aria-label={note ? "Nota interna" : "Mensagem"}
+            className={cx(
+              "max-h-40 min-h-10 flex-1 resize-none rounded-[20px] border bg-surface px-4 py-2 text-[15px] outline-none",
+              note ? "border-warn/40 focus:border-warn" : "border-separator focus:border-accent",
+            )}
+            style={{ fieldSizing: "content" } as React.CSSProperties}
+          />
+          {showMic ? (
+            <button
+              type="button"
+              onClick={() => voice.start()}
+              disabled={sending}
+              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:opacity-30"
+              aria-label="Gravar áudio"
+              title="Gravar áudio (vai como mensagem de voz)"
+            >
+              <Mic size={20} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={sending || (!text.trim() && !file)}
+              className={cx(
+                "mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition disabled:opacity-30",
+                note ? "bg-warn" : "bg-accent",
+              )}
+              aria-label={
+                note
+                  ? "Salvar nota"
+                  : editing
+                    ? "Salvar edição"
+                    : scheduleAt !== null
+                      ? editingSched
+                        ? "Salvar agendamento"
+                        : "Agendar"
+                      : "Enviar"
+              }
+            >
+              {note ? (
+                <StickyNote size={16} />
+              ) : scheduleAt !== null ? (
+                <Clock size={16} />
+              ) : editing ? (
+                <Check size={16} />
+              ) : (
+                <SendHorizontal size={18} />
+              )}
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }

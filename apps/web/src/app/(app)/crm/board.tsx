@@ -20,6 +20,7 @@ import { Avatar, Badge, Button, cx, Field, Input, Notice, Select } from "@/compo
 import { formatPhone } from "@/lib/format";
 import { subscribeLive } from "@/lib/live";
 import { DealList } from "./deal-list";
+import { DealSchedule } from "./deal-schedule";
 
 type Deal = {
   id: string;
@@ -672,6 +673,7 @@ function DealPanel({
                 }}
               />
             </section>
+            <DealSchedule key={d.conversationId ?? "sem"} conversationId={d.conversationId} />
             <Link
               href={`/tarefas?negociacao=${d.id}`}
               className="flex items-center justify-between rounded-[var(--radius-card)] bg-surface px-4 py-3 text-[15px] hover:bg-fill/60"

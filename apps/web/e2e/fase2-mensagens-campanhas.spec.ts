@@ -1,5 +1,26 @@
 import { expect, type Page, test } from "@playwright/test";
 
+test.use({
+  permissions: ["microphone"],
+  launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] },
+});
+
+/** Ação do campo de mensagem: no celular fica atrás do botão "+" (Mais opções). */
+async function composerAction(page: Page, name: string) {
+  const more = page.getByRole("button", { name: "Mais opções" });
+  // Celular (tela estreita): as ações ficam atrás do "+". Computador: botões direto no campo.
+  if ((page.viewportSize()?.width ?? 1280) >= 768)
+    return page.getByRole("button", { name, exact: true }).click();
+  // A conversa pode recarregar logo depois de aberta: reabre o menu se ele fechar.
+  await expect(async () => {
+    if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+    await page
+      .getByRole("list", { name: "Mais opções" })
+      .getByRole("button", { name, exact: true })
+      .click({ timeout: 2000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
   password: process.env.E2E_MASTER_PASSWORD ?? "Master12345",
@@ -78,7 +99,7 @@ test("mensagens: responder, editar, apagar, agendar, resumo da IA e campanha", a
   await expect(edited.getByTestId("apagada")).toHaveText("Você apagou esta mensagem");
 
   // Agendar
-  await page.getByRole("button", { name: "Agendar mensagem" }).click();
+  await composerAction(page, "Agendar mensagem");
   const when = new Date(Date.now() + 2 * 86_400_000 - 3 * 3600_000).toISOString().slice(0, 10);
   await page.getByLabel("Agendar para").fill(`${when}T09:30`);
   await box.fill("Bom dia! Ainda tem interesse no HR-V?");
@@ -86,12 +107,69 @@ test("mensagens: responder, editar, apagar, agendar, resumo da IA e campanha", a
   const sched = page.getByTestId("agendadas");
   await expect(sched).toContainText("09:30");
   await expect(sched).toContainText("Bom dia! Ainda tem interesse no HR-V?");
+  // Editar o agendado: texto com #periodo-dia e novo horário.
+  await sched.getByRole("button", { name: "Editar" }).click();
+  await expect(page.getByLabel("Agendar para")).toHaveValue(`${when}T09:30`);
+  await page.getByLabel("Agendar para").fill(`${when}T10:15`);
+  await box.fill("#periodo-dia! Ainda tem interesse no HR-V?");
+  await page.getByRole("button", { name: "Salvar agendamento" }).click();
+  await expect(sched).toContainText("10:15");
+  await expect(sched).toContainText("#periodo-dia! Ainda tem interesse no HR-V?");
   await sched.getByRole("button", { name: "Cancelar" }).click();
   await expect(sched).toHaveCount(0);
+
+  if (mobile) {
+    await page.getByRole("button", { name: "Mais opções" }).click();
+    await page.screenshot({ path: `test-results/conversa-mais-${testInfo.project.name}.png` });
+    await page.getByRole("button", { name: "Mais opções" }).click();
+  }
+  await page.screenshot({ path: `test-results/conversa-${testInfo.project.name}.png` });
+  // Áudio gravado no navegador: vai como mensagem de voz do WhatsApp.
+  const sentBefore = ((await (await fetch(`${FAKE}/__test/sent`)).json()) as unknown[]).length;
+  await page.getByRole("button", { name: "Gravar áudio" }).click();
+  await expect(page.getByTestId("gravando")).toBeVisible();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `test-results/gravando-${testInfo.project.name}.png` });
+  await page.getByRole("button", { name: "Enviar áudio" }).click();
+  await expect(page.getByTestId("gravando")).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const sent = (await (await fetch(`${FAKE}/__test/sent`)).json()) as { kind: string }[];
+      return sent.slice(sentBefore).map((x) => x.kind);
+    })
+    .toContain("sendWhatsAppAudio");
+  await expect(page.getByTestId("thread-messages").locator("audio").last()).toBeVisible();
 
   // Resumo da IA
   await page.getByTestId("resumo-ia").getByRole("button", { name: "Resumir com IA" }).click();
   await expect(page.getByTestId("resumo-ia")).toContainText("Morno · 5/10");
+
+  // Agendar pela negociação no CRM e editar na tela Agendadas.
+  await page.goto("/crm");
+  await page.getByTestId("deal-card").filter({ hasText: "Cliente Teste" }).first().click();
+  const ag = page.getByRole("dialog", { name: "Negociação" }).getByTestId("agendar-negociacao");
+  await ag.getByLabel("Mensagem para agendar").fill("Oi Maria, passando para confirmar a visita.");
+  await ag.getByLabel("Enviar em").fill(`${when}T16:45`);
+  await ag.getByRole("button", { name: "Agendar" }).click();
+  await expect(ag).toContainText("Oi Maria, passando para confirmar a visita.");
+  await page.goto("/agendadas");
+  const item = page.getByTestId("programada").filter({ hasText: "confirmar a visita" });
+  await item.getByRole("button", { name: "Editar" }).click();
+  const editing = page.getByTestId("programada").filter({ has: page.getByLabel("Texto agendado") });
+  await editing.getByLabel("Texto agendado").fill("Oi Maria, visita confirmada para amanhã?");
+  await editing.getByRole("button", { name: "Salvar", exact: true }).click();
+  await expect(
+    page.getByTestId("programada").filter({ hasText: "visita confirmada para amanhã" }),
+  ).toBeVisible();
+
+  // Conversas filtradas pela etapa do CRM.
+  await page.goto("/conversas");
+  const items = page.getByTestId("conversation-item");
+  await expect(items.filter({ hasText: "Cliente Teste" })).toHaveCount(1);
+  await page.getByLabel("Etapa do CRM").selectOption({ label: "Proposta" });
+  await expect(items).toHaveCount(0);
+  await page.getByLabel("Etapa do CRM").selectOption({ label: "Novo lead" });
+  await expect(items.filter({ hasText: "Cliente Teste" })).toHaveCount(1);
 
   // Campanha (pelo menu, a partir do Início)
   await page.goto("/");

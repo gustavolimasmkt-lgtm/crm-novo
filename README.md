@@ -141,3 +141,11 @@ npx playwright test
 - `connectionAlerts` alimenta a faixa vermelha (`components/connection-banner.tsx`).
 - Tempo real no navegador: uma única conexão SSE por aba (`lib/live.ts`), compartilhada por faixa, avisos, quadro e conversas.
 - Backup: o plano Hobby do Railway não tem backup de volume; no Pro, ligar Daily/Weekly na aba Backups do Postgres.
+
+## Celular e mensagens
+
+- App instalável (PWA): `app/manifest.ts`, ícones em `public/icons`, `public/sw.js` mínimo (sem cache). Conta mostra como instalar.
+- Áudio gravado (`lib/voice.ts`, MediaRecorder) vai pelo mesmo envio de arquivo; tipo áudio usa `sendWhatsAppAudio` (mensagem de voz).
+- `#periodo-dia` (`fillDayPeriod` em `core/src/text.ts`) é trocado na hora do envio em `sendMessage` e `sendAiMessage`.
+- Agendadas: `updateScheduled` (PATCH `/api/agendadas/[id]`), lista por conversa em GET `/api/conversas/[id]/agendar`.
+- Conversas: filtro `etapa` (id da etapa ou `none`).

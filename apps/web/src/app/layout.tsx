@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { RegisterSW } from "@/components/register-sw";
 
 const appName = process.env.APP_NAME ?? "CRM";
 
@@ -7,6 +8,10 @@ export const metadata: Metadata = {
   title: { default: appName, template: `%s · ${appName}` },
   description: "CRM com WhatsApp e Agente de IA",
   appleWebApp: { capable: true, title: appName, statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/icons/favicon-64.png", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
@@ -22,7 +27,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <RegisterSW />
+      </body>
     </html>
   );
 }

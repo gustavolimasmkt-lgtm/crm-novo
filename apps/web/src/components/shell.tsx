@@ -121,7 +121,7 @@ export function Shell({
         </form>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 pb-28 pt-6 md:px-10 md:pb-12 md:pt-10">
+      <main className="min-w-0 flex-1 px-4 pb-28 pt-[max(1.5rem,env(safe-area-inset-top))] md:px-10 md:pb-12 md:pt-10">
         <div className="mx-auto max-w-[1100px]">{children}</div>
       </main>
 

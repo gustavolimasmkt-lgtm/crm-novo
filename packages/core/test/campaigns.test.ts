@@ -18,6 +18,7 @@ import {
   createContact,
   createEvolutionClient,
   createOrganization,
+  dayPeriod,
   deleteMessage,
   editMessage,
   handleEvolutionWebhook,
@@ -39,6 +40,7 @@ import {
   setCampaignStatus,
   setMyPhone,
   summarizeConversation,
+  updateScheduled,
 } from "../src/index.js";
 import { type FakeAnthropic, startFakeAnthropic } from "../src/testing/fake-anthropic.js";
 import { type FakeEvolution, startFakeEvolution } from "../src/testing/fake-evolution.js";
@@ -194,15 +196,27 @@ describe("mensagens agendadas", () => {
       "Cancelada",
     ]);
     await cancelScheduled(db, admin, org.id, id2 ?? "");
+    await expect(
+      updateScheduled(db, admin, org.id, id2 ?? "", { text: "x", sendAt: new Date(Date.now() + 3600_000) }),
+    ).rejects.toThrow(/já saiu ou foi cancelada/);
+    // Edita: novo texto com #periodo-dia (vira a saudação na hora de enviar) e novo horário.
+    await updateScheduled(db, admin, org.id, id1 ?? "", {
+      text: "#periodo-dia! Conseguiu ver o carro?",
+      sendAt: new Date(Date.now() + 5400_000),
+    });
+    await expect(
+      updateScheduled(db, admin, org.id, id1 ?? "", { text: "ok", sendAt: new Date(Date.now() - 1000) }),
+    ).rejects.toThrow(/1 minuto/);
     expect(await processScheduled(db, evo)).toBe(0);
     await db
       .update(scheduledMessages)
       .set({ sendAt: new Date(Date.now() - 1000) })
       .where(eq(scheduledMessages.id, id1 ?? ""));
     expect(await processScheduled(db, evo)).toBe(1);
-    expect(fake.sent.at(-1)?.body).toMatchObject({ text: "Bom dia! Conseguiu ver o carro?" });
+    const greet = dayPeriod().replace(/^./, (c) => c.toUpperCase());
+    expect(fake.sent.at(-1)?.body).toMatchObject({ text: `${greet}! Conseguiu ver o carro?` });
     const m = await db.query.messages.findFirst({
-      where: eq(messages.body, "Bom dia! Conseguiu ver o carro?"),
+      where: eq(messages.body, `${greet}! Conseguiu ver o carro?`),
     });
     expect(m?.sentByUserId).toBe(admin.userId);
     expect(await listScheduled(db, admin, org.id, c?.id ?? "")).toEqual([]);

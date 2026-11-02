@@ -14,7 +14,7 @@ export default async function QuickRepliesPage() {
     <>
       <PageHeader
         title="Respostas rápidas"
-        subtitle='Na conversa, digite "/" e o atalho para inserir a mensagem. {nome} vira o primeiro nome do cliente.'
+        subtitle='Na conversa, digite "/" e o atalho para inserir a mensagem. {nome} vira o primeiro nome do cliente e #periodo-dia vira bom dia, boa tarde ou boa noite.'
       />
       <QuickRepliesClient items={items} canEdit={can(ctx.actor, "settings.manage")} />
     </>

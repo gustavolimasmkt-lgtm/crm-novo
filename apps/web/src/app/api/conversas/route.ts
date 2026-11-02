@@ -11,6 +11,7 @@ export const GET = withOrg(async (req, ctx) => {
   const list = await listConversations(getDb(), ctx.actor, ctx.organizationId, {
     filter: f && FILTERS.includes(f) ? f : "open",
     q: u.searchParams.get("q") ?? undefined,
+    stageId: u.searchParams.get("etapa") ?? undefined,
   });
   return Response.json(list, { headers: { "cache-control": "no-store" } });
 });

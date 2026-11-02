@@ -8,6 +8,17 @@ import { notifyOrg } from "./events.js";
 
 type ActorU = Actor & { userId: string };
 
+function validate(input: { text: string; sendAt: Date }) {
+  const body = input.text.trim();
+  if (!body) throw new AppError("validation", "Escreva a mensagem.");
+  if (body.length > 4096) throw new AppError("validation", "Mensagem longa demais.");
+  const at = input.sendAt.getTime();
+  if (Number.isNaN(at) || at < Date.now() + 60_000)
+    throw new AppError("validation", "Escolha um horário a partir de daqui a 1 minuto.");
+  if (at > Date.now() + 90 * 86_400_000) throw new AppError("validation", "Agende para no máximo 90 dias.");
+  return body;
+}
+
 /** Agenda uma mensagem na conversa (sai em nome de quem agendou). */
 export async function scheduleMessage(
   db: Database,
@@ -17,13 +28,7 @@ export async function scheduleMessage(
   input: { text: string; sendAt: Date },
 ) {
   const conv = await getConversation(db, actor, organizationId, conversationId);
-  const body = input.text.trim();
-  if (!body) throw new AppError("validation", "Escreva a mensagem.");
-  if (body.length > 4096) throw new AppError("validation", "Mensagem longa demais.");
-  const at = input.sendAt.getTime();
-  if (Number.isNaN(at) || at < Date.now() + 60_000)
-    throw new AppError("validation", "Escolha um horário a partir de daqui a 1 minuto.");
-  if (at > Date.now() + 90 * 86_400_000) throw new AppError("validation", "Agende para no máximo 90 dias.");
+  const body = validate(input);
   const [r] = await db
     .insert(scheduledMessages)
     .values({
@@ -66,6 +71,31 @@ export async function cancelScheduled(db: Database, actor: ActorU, organizationI
   if (!s || s.status !== "pending") throw new AppError("not_found", "Agendamento não encontrado.");
   await getConversation(db, actor, organizationId, s.conversationId);
   await db.update(scheduledMessages).set({ status: "canceled" }).where(eq(scheduledMessages.id, id));
+  await notifyOrg(db, { o: organizationId, t: "message", c: s.conversationId });
+}
+
+/** Muda texto e horário de uma mensagem agendada que ainda não saiu. */
+export async function updateScheduled(
+  db: Database,
+  actor: ActorU,
+  organizationId: string,
+  id: string,
+  input: { text: string; sendAt: Date },
+) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError("not_found", "Agendamento não encontrado.");
+  const s = await db.query.scheduledMessages.findFirst({
+    where: and(eq(scheduledMessages.id, id), eq(scheduledMessages.organizationId, organizationId)),
+  });
+  if (!s || s.status !== "pending")
+    throw new AppError("not_found", "Essa mensagem já saiu ou foi cancelada.");
+  await getConversation(db, actor, organizationId, s.conversationId);
+  const body = validate(input);
+  const [r] = await db
+    .update(scheduledMessages)
+    .set({ body, sendAt: input.sendAt })
+    .where(and(eq(scheduledMessages.id, id), eq(scheduledMessages.status, "pending")))
+    .returning({ id: scheduledMessages.id });
+  if (!r) throw new AppError("not_found", "Essa mensagem já saiu ou foi cancelada.");
   await notifyOrg(db, { o: organizationId, t: "message", c: s.conversationId });
 }
 

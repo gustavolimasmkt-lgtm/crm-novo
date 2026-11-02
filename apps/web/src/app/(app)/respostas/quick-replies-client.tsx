@@ -90,7 +90,10 @@ export function QuickRepliesClient({ items, canEdit }: { items: Item[]; canEdit:
               placeholder="endereco"
             />
           </Field>
-          <Field label="Mensagem" hint="Use {nome} para o primeiro nome do cliente.">
+          <Field
+            label="Mensagem"
+            hint="Use {nome} para o primeiro nome do cliente e #periodo-dia para bom dia, boa tarde ou boa noite (na hora do envio)."
+          >
             <textarea
               name="body"
               defaultValue={editing?.body ?? ""}

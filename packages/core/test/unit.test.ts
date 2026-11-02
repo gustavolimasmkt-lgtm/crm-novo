@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashPassword, passwordProblem, verifyPassword } from "../src/auth/crypto.js";
 import { can, canInviteRole } from "../src/auth/permissions.js";
-import { initials, slugify } from "../src/text.js";
+import { dayPeriod, fillDayPeriod, initials, slugify } from "../src/text.js";
 
 describe("senhas", () => {
   it("gera hash verificável e rejeita senha errada", async () => {
@@ -43,5 +43,19 @@ describe("texto", () => {
     expect(slugify("GreenCar Veículos")).toBe("greencar-veiculos");
     expect(initials("Gustavo de Lima")).toBe("GL");
     expect(initials("")).toBe("?");
+  });
+});
+
+describe("#periodo-dia", () => {
+  // 10h, 15h e 21h em Brasília (UTC-3).
+  const at = (h: number) => new Date(`2026-11-02T${String(h + 3).padStart(2, "0")}:00:00Z`);
+  it("vira bom dia, boa tarde ou boa noite no horário de Brasília", () => {
+    expect(fillDayPeriod("#periodo-dia, Ana!", at(10))).toBe("Bom dia, Ana!");
+    expect(fillDayPeriod("Oi Ana, #periodo-dia!", at(15))).toBe("Oi Ana, boa tarde!");
+    expect(fillDayPeriod("Tudo certo. #período-dia", at(21))).toBe("Tudo certo. Boa noite");
+    expect(fillDayPeriod("#PERIODO-DIA", new Date("2026-11-02T06:30:00Z"))).toBe("Boa noite");
+    expect(dayPeriod(new Date("2026-11-02T08:00:00Z"))).toBe("bom dia");
+    expect(dayPeriod(new Date("2026-11-02T15:00:00Z"))).toBe("boa tarde");
+    expect(fillDayPeriod("sem etiqueta")).toBe("sem etiqueta");
   });
 });

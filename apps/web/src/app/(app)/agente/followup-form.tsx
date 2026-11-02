@@ -82,7 +82,7 @@ export function FollowupForm({
               rows={2}
               maxLength={1000}
               aria-label={`Texto do ${i + 1}º follow-up`}
-              placeholder="Vazio: a IA escreve com base na conversa. Ou um texto fixo, ex.: Oi {nome}, ainda procurando carro?"
+              placeholder="Vazio: a IA escreve com base na conversa. Ou um texto fixo, ex.: #periodo-dia, {nome}! Ainda procurando carro?"
               className="w-full rounded-xl bg-surface px-3 py-2 text-[14px] outline-none focus:shadow-[0_0_0_4px_var(--accent-soft)]"
             />
           </li>

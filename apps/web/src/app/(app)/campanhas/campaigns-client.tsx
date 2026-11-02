@@ -267,7 +267,7 @@ function NewCampaign({
           </div>
           <Field
             label="Mensagem"
-            hint="{nome} vira o primeiro nome do cliente. Evite links e textos iguais a spam."
+            hint="{nome} vira o primeiro nome do cliente e #periodo-dia vira bom dia, boa tarde ou boa noite na hora de cada envio. Evite links e textos iguais a spam."
           >
             <textarea
               name="body"

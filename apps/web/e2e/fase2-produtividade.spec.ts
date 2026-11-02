@@ -1,5 +1,21 @@
 import { expect, type Page, test } from "@playwright/test";
 
+/** Ação do campo de mensagem: no celular fica atrás do botão "+" (Mais opções). */
+async function composerAction(page: Page, name: string) {
+  const more = page.getByRole("button", { name: "Mais opções" });
+  // Celular (tela estreita): as ações ficam atrás do "+". Computador: botões direto no campo.
+  if ((page.viewportSize()?.width ?? 1280) >= 768)
+    return page.getByRole("button", { name, exact: true }).click();
+  // A conversa pode recarregar logo depois de aberta: reabre o menu se ele fechar.
+  await expect(async () => {
+    if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+    await page
+      .getByRole("list", { name: "Mais opções" })
+      .getByRole("button", { name, exact: true })
+      .click({ timeout: 2000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
   password: process.env.E2E_MASTER_PASSWORD ?? "Master12345",
@@ -76,14 +92,14 @@ test("produtividade: respostas rápidas, nota interna, áudio transcrito, tarefa
 
   // Nota interna: aparece só no CRM
   const before = ((await (await fetch(`${FAKE}/__test/sent`)).json()) as unknown[]).length;
-  await page.getByRole("button", { name: "Nota interna" }).click();
+  await composerAction(page, "Nota interna");
   await page.getByLabel("Nota interna", { exact: true }).last().fill("Cliente prefere contato à tarde");
   await page.getByRole("button", { name: "Salvar nota" }).click();
   await expect(page.getByTestId("note")).toContainText("Cliente prefere contato à tarde");
   await expect(page.getByTestId("note")).toContainText("Nota interna · Admin");
   const after = ((await (await fetch(`${FAKE}/__test/sent`)).json()) as unknown[]).length;
   expect(after).toBe(before);
-  await page.getByRole("button", { name: "Nota interna" }).first().click();
+  await composerAction(page, "Nota interna");
 
   // Áudio: botão Transcrever
   await incoming({ audio: true });

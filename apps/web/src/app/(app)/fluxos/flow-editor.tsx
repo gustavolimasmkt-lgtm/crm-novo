@@ -284,7 +284,7 @@ export function FlowEditor({
                 rows={3}
                 maxLength={2000}
                 aria-label={`Mensagem do passo ${i + 1}`}
-                placeholder="Use {nome} para o primeiro nome do cliente"
+                placeholder="Use {nome} para o primeiro nome e #periodo-dia para bom dia, boa tarde ou boa noite"
                 className="w-full rounded-xl bg-fill px-3.5 py-3 text-[15px] outline-none focus:bg-surface focus:shadow-[0_0_0_4px_var(--accent-soft)]"
               />
             )}

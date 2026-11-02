@@ -1,5 +1,21 @@
 import { expect, type Page, test } from "@playwright/test";
 
+/** Ação do campo de mensagem: no celular fica atrás do botão "+" (Mais opções). */
+async function composerAction(page: Page, name: string) {
+  const more = page.getByRole("button", { name: "Mais opções" });
+  // Celular (tela estreita): as ações ficam atrás do "+". Computador: botões direto no campo.
+  if ((page.viewportSize()?.width ?? 1280) >= 768)
+    return page.getByRole("button", { name, exact: true }).click();
+  // A conversa pode recarregar logo depois de aberta: reabre o menu se ele fechar.
+  await expect(async () => {
+    if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+    await page
+      .getByRole("list", { name: "Mais opções" })
+      .getByRole("button", { name, exact: true })
+      .click({ timeout: 2000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
   password: process.env.E2E_MASTER_PASSWORD ?? "Master12345",
@@ -89,7 +105,7 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   // Envia o fluxo na conversa: texto e foto saem na hora; depois espera 2 dias
   await page.goto("/conversas");
   await page.getByTestId("conversation-item").filter({ hasText: "Cliente Teste" }).click({ timeout: 10_000 });
-  await page.getByRole("button", { name: "Enviar fluxo" }).click();
+  await composerAction(page, "Enviar fluxo");
   await page.getByRole("button", { name: "Reaquecer cliente" }).click();
   const thread = page.getByTestId("thread-messages");
   await expect(thread.getByText("Oi Cliente, tudo bem?")).toBeVisible({ timeout: 15_000 });
@@ -98,7 +114,7 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await expect(page.getByTestId("fluxos-ativos")).toContainText("Reaquecer cliente");
   await expect(page.getByTestId("fluxos-ativos")).toContainText("passo 4 de 5");
   await expect(page.getByTestId("ai-bar")).toHaveCount(0);
-  await page.getByRole("button", { name: "Enviar fluxo" }).click();
+  await composerAction(page, "Enviar fluxo");
   await page.getByRole("button", { name: "Reaquecer cliente" }).click();
   await expect(page.getByText("Esse fluxo já está rodando para este cliente.")).toBeVisible();
 

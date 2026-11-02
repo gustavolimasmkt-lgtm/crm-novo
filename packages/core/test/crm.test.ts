@@ -199,6 +199,26 @@ describe("funil e negociações", () => {
     await deleteDeal(db, mgr, org.id, mine);
   });
 
+  it("conversas filtradas pela etapa do CRM", async () => {
+    const { org, admin } = await setup();
+    const { say } = await withConnection(org, admin);
+    await say("E1", "5548999990011", "Oi");
+    await say("E2", "5548999990012", "Olá");
+    const board = await getBoard(db, admin, org.id);
+    const [first] = board.stages[0]?.deals ?? [];
+    const proposta = board.stages.find((s) => s.name === "Proposta");
+    const perdido = board.stages.find((s) => s.kind === "lost");
+    await moveDeal(db, admin, org.id, first?.id ?? "", proposta?.id ?? "");
+    const inProposta = await listConversations(db, admin, org.id, { filter: "all", stageId: proposta?.id });
+    expect(inProposta.map((c) => c.contactPhone)).toEqual([first?.contactPhone]);
+    expect(
+      await listConversations(db, admin, org.id, { filter: "all", stageId: board.stages[0]?.id }),
+    ).toHaveLength(1);
+    expect(await listConversations(db, admin, org.id, { filter: "all", stageId: "none" })).toHaveLength(0);
+    await moveDeal(db, admin, org.id, first?.id ?? "", perdido?.id ?? "");
+    expect(await listConversations(db, admin, org.id, { filter: "all", stageId: "none" })).toHaveLength(1);
+  });
+
   it("puxar a conversa leva junto a negociação sem dono", async () => {
     const { org, admin, mk } = await setup();
     const seller = await mk("v2@crm.com", "Vendedor Dois", "seller");

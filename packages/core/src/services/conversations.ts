@@ -15,6 +15,7 @@ import { and, desc, eq, ilike, isNull, lt, or, type SQL, sql } from "drizzle-orm
 import { z } from "zod";
 import type { Transcriber } from "../ai/transcribe.js";
 import { type Actor, can } from "../auth/permissions.js";
+import { fillDayPeriod } from "../text.js";
 import {
   type EvolutionApi,
   EvolutionError,
@@ -95,7 +96,7 @@ export async function listConversations(
   db: Database,
   actor: ActorU,
   organizationId: string,
-  opts: { filter?: ConversationFilter; q?: string; limit?: number } = {},
+  opts: { filter?: ConversationFilter; q?: string; stageId?: string; limit?: number } = {},
 ): Promise<ConversationListItem[]> {
   const conds: (SQL | undefined)[] = [eq(conversations.organizationId, organizationId), visibility(actor)];
   const f = opts.filter ?? "open";
@@ -103,6 +104,14 @@ export async function listConversations(
   if (f === "closed") conds.push(eq(conversations.status, "closed"));
   if (f === "unread") conds.push(sql`${conversations.unreadCount} > 0`);
   if (f === "mine") conds.push(eq(conversations.assignedUserId, actor.userId));
+  // Etapa do CRM: o contato tem negociação nessa etapa ("none" = sem negociação aberta).
+  if (opts.stageId === "none")
+    conds.push(sql`not exists (select 1 from deals d join pipeline_stages s on s.id = d.stage_id
+      where d.contact_id = "conversations"."contact_id" and d.organization_id = "conversations"."organization_id"
+        and s.kind in ('open','scheduled'))`);
+  else if (opts.stageId && /^[0-9a-f-]{36}$/i.test(opts.stageId))
+    conds.push(sql`exists (select 1 from deals d where d.contact_id = "conversations"."contact_id"
+      and d.organization_id = "conversations"."organization_id" and d.stage_id = ${opts.stageId})`);
   const q = opts.q?.trim();
   if (q) {
     const digits = q.replace(/\D/g, "");
@@ -355,7 +364,7 @@ export async function sendMessage(
   raw: z.input<typeof sendInput>,
 ) {
   const input = sendInput.parse(raw);
-  const text = input.text?.trim() || null;
+  const text = fillDayPeriod(input.text?.trim() ?? "") || null;
   if (!text && !input.file) throw new AppError("validation", "Escreva uma mensagem ou anexe um arquivo.");
   if (input.file && input.file.data.length > MAX_MEDIA_BYTES)
     throw new AppError("validation", "Arquivo grande demais (máximo 16 MB).");
@@ -679,6 +688,7 @@ export async function sendAiMessage(
   } = {},
 ) {
   const image = opts.media ?? opts.image;
+  text = fillDayPeriod(text);
   const conv = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.organizationId, organizationId)),
   });

@@ -1,4 +1,4 @@
-import { AppError, scheduleMessage } from "@crm/core";
+import { AppError, listScheduled, scheduleMessage } from "@crm/core";
 import { getDb } from "@crm/db";
 import { withOrg } from "@/lib/api";
 
@@ -16,3 +16,10 @@ export const POST = withOrg<{ id: string }>(async (req, ctx, { id }) => {
   });
   return Response.json({ id: sid });
 });
+
+export const GET = withOrg<{ id: string }>(async (_req, ctx, { id }) =>
+  Response.json(
+    { items: await listScheduled(getDb(), ctx.actor, ctx.organizationId, id) },
+    { headers: { "cache-control": "no-store" } },
+  ),
+);
