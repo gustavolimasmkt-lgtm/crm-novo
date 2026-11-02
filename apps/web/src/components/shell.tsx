@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarClock,
   CalendarDays,
+  ChevronDown,
   ChevronsUpDown,
   Crown,
   Home,
@@ -26,12 +27,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { logoutAction, switchOrgAction } from "@/app/actions/auth";
 import { Avatar, cx } from "./ui";
 
 type Org = { id: string; name: string };
-type NavItem = { href: string; label: string; icon: ReactNode; primary?: boolean };
+type NavItem = { href: string; label: string; icon: ReactNode; primary?: boolean; group?: GroupId };
+type GroupId = "dia" | "vendas" | "automacao" | "marketing" | "config";
+const GROUPS: { id: GroupId; label: string }[] = [
+  { id: "dia", label: "Dia a dia" },
+  { id: "vendas", label: "Vendas" },
+  { id: "automacao", label: "Automação" },
+  { id: "marketing", label: "Anúncios" },
+  { id: "config", label: "Configurações" },
+];
+const OPEN_KEY = "crm.menu.abertos";
 
 export function Shell({
   children,
@@ -57,45 +67,97 @@ export function Shell({
     { href: "/conversas", label: "Conversas", icon: <MessageCircle size={20} />, primary: true },
     { href: "/crm", label: "CRM", icon: <KanbanSquare size={20} />, primary: true },
     { href: "/contatos", label: "Contatos", icon: <UserRound size={20} />, primary: true },
-    { href: "/tarefas", label: "Tarefas", icon: <ListTodo size={20} /> },
-    { href: "/agendadas", label: "Agendadas", icon: <CalendarClock size={20} /> },
-    { href: "/agenda", label: "Agenda", icon: <CalendarDays size={20} /> },
-    { href: "/catalogo", label: "Catálogo", icon: <Package size={20} /> },
-    { href: "/respostas", label: "Respostas rápidas", icon: <Zap size={20} /> },
-    ...(canSeeTeam ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} /> }] : []),
-    ...(canManageConnections
-      ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} /> }]
+    { href: "/tarefas", label: "Tarefas", icon: <ListTodo size={20} />, group: "dia" },
+    { href: "/agendadas", label: "Agendadas", icon: <CalendarClock size={20} />, group: "dia" },
+    { href: "/agenda", label: "Agenda", icon: <CalendarDays size={20} />, group: "dia" },
+    { href: "/catalogo", label: "Catálogo", icon: <Package size={20} />, group: "vendas" },
+    { href: "/respostas", label: "Respostas rápidas", icon: <Zap size={20} />, group: "vendas" },
+    ...(canConfigure
+      ? ([
+          { href: "/agente", label: "Agente de IA", icon: <Bot size={20} />, group: "automacao" },
+          { href: "/fluxos", label: "Fluxos", icon: <Workflow size={20} />, group: "automacao" },
+          { href: "/campanhas", label: "Campanhas", icon: <Megaphone size={20} />, group: "automacao" },
+          { href: "/anuncios", label: "Anúncios", icon: <BarChart3 size={20} />, group: "marketing" },
+          { href: "/meta", label: "Integração Meta", icon: <Plug size={20} />, group: "marketing" },
+        ] satisfies NavItem[])
       : []),
-    ...(canConfigure ? [{ href: "/agente", label: "Agente de IA", icon: <Bot size={20} /> }] : []),
-    ...(canConfigure ? [{ href: "/fluxos", label: "Fluxos", icon: <Workflow size={20} /> }] : []),
-    ...(canConfigure ? [{ href: "/campanhas", label: "Campanhas", icon: <Megaphone size={20} /> }] : []),
-    ...(canConfigure ? [{ href: "/anuncios", label: "Anúncios", icon: <BarChart3 size={20} /> }] : []),
-    ...(canConfigure ? [{ href: "/meta", label: "Integração Meta", icon: <Plug size={20} /> }] : []),
-    { href: "/conta", label: "Conta", icon: <Settings2 size={20} /> },
-    ...(user.isMaster ? [{ href: "/master", label: "Master", icon: <Crown size={20} /> }] : []),
+    ...(canSeeTeam
+      ? [{ href: "/equipe", label: "Equipe", icon: <Users size={20} />, group: "config" as const }]
+      : []),
+    ...(canManageConnections
+      ? [{ href: "/conexoes", label: "Conexões", icon: <Smartphone size={20} />, group: "config" as const }]
+      : []),
+    { href: "/conta", label: "Conta", icon: <Settings2 size={20} />, group: "config" },
+    ...(user.isMaster
+      ? [{ href: "/master", label: "Master", icon: <Crown size={20} />, group: "config" as const }]
+      : []),
   ];
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  const activeGroup = nav.find((n) => n.group && isActive(n.href))?.group;
+  // Categorias abertas: lembradas neste navegador; a da tela atual sempre abre.
+  const [open, setOpen] = useState<GroupId[]>([]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as GroupId[];
+      setOpen(Array.isArray(saved) ? saved : []);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    if (activeGroup) setOpen((o) => (o.includes(activeGroup) ? o : [...o, activeGroup]));
+  }, [activeGroup]);
+  const toggleGroup = (g: GroupId) =>
+    setOpen((o) => {
+      const next = o.includes(g) ? o.filter((x) => x !== g) : [...o, g];
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  const groups = GROUPS.map((g) => ({ ...g, items: nav.filter((n) => n.group === g.id) })).filter(
+    (g) => g.items.length,
+  );
+  const link = (n: NavItem) => (
+    <Link
+      key={n.href}
+      href={n.href}
+      className={cx(
+        "flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] transition-colors",
+        isActive(n.href) ? "bg-accent text-white" : "text-ink hover:bg-fill",
+      )}
+    >
+      {n.icon}
+      {n.label}
+    </Link>
+  );
 
   return (
     <div className="min-h-dvh md:flex">
       {/* Barra lateral (computador) */}
       <aside className="material sticky top-0 hidden h-dvh w-[260px] shrink-0 flex-col border-r border-separator px-3 py-4 md:flex">
         <OrgSwitcher org={org} orgs={orgs} />
-        <nav className="mt-4 space-y-0.5" aria-label="Principal">
-          {nav.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={cx(
-                "flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] transition-colors",
-                isActive(n.href) ? "bg-accent text-white" : "text-ink hover:bg-fill",
-              )}
-            >
-              {n.icon}
-              {n.label}
-            </Link>
-          ))}
+        <nav className="mt-4 min-h-0 flex-1 space-y-0.5 overflow-y-auto" aria-label="Principal">
+          {nav.filter((n) => n.primary).map(link)}
+          {groups.map((g) => {
+            const isOpen = open.includes(g.id);
+            return (
+              <div key={g.id} className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.id)}
+                  aria-expanded={isOpen}
+                  className={cx(
+                    "flex h-8 w-full items-center gap-2 rounded-lg px-3 text-[12px] font-semibold uppercase tracking-wide hover:bg-fill",
+                    g.id === activeGroup ? "text-accent" : "text-ink-3",
+                  )}
+                >
+                  <span className="flex-1 text-left">{g.label}</span>
+                  <ChevronDown size={14} className={cx("transition-transform", !isOpen && "-rotate-90")} />
+                </button>
+                {isOpen && <div className="space-y-0.5">{g.items.map(link)}</div>}
+              </div>
+            );
+          })}
         </nav>
         <div className="mt-auto flex items-center gap-3 rounded-xl px-2 py-2">
           <Avatar name={user.name} size={32} />
@@ -170,23 +232,30 @@ export function Shell({
             aria-label="Fechar"
             onClick={() => setMore(false)}
           />
-          <div className="relative w-full rounded-t-[22px] bg-surface p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {nav
-              .filter((n) => !n.primary)
-              .map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  onClick={() => setMore(false)}
-                  className={cx(
-                    "flex h-12 items-center gap-3 rounded-xl px-3 text-[16px]",
-                    isActive(n.href) ? "bg-accent-soft text-accent" : "text-ink",
-                  )}
-                >
-                  {n.icon}
-                  {n.label}
-                </Link>
-              ))}
+          <div className="relative max-h-[80dvh] w-full overflow-y-auto rounded-t-[22px] bg-surface p-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {groups.map((g) => (
+              <div key={g.id} className="mb-1">
+                <p className="px-3 pt-2 pb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-3">
+                  {g.label}
+                </p>
+                <div className="grid grid-cols-2 gap-1">
+                  {g.items.map((n) => (
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      onClick={() => setMore(false)}
+                      className={cx(
+                        "flex h-12 items-center gap-2.5 rounded-xl px-3 text-[15px]",
+                        isActive(n.href) ? "bg-accent-soft text-accent" : "bg-fill/60 text-ink",
+                      )}
+                    >
+                      {n.icon}
+                      <span className="truncate">{n.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 /** Ação do campo de mensagem: no celular fica atrás do botão "+" (Mais opções). */
 async function composerAction(page: Page, name: string) {
@@ -56,8 +57,7 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await page.waitForURL((u) => u.pathname === "/");
 
   // Cria o fluxo pelo menu
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Fluxos" }).first().click();
+  await openFromMenu(page, "Fluxos");
   await expect(page.getByText("Nenhum fluxo")).toBeVisible();
   await page.getByRole("button", { name: "Novo fluxo" }).click();
   await page.getByLabel("Nome do fluxo").fill("Reaquecer cliente");
@@ -149,4 +149,21 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await expect(disparo).toContainText("1 cliente(s) na fila do disparo");
   await page.goto("/agendadas");
   await expect(page.getByTestId("programada").filter({ hasText: "Cliente Teste" })).toContainText("Fluxo");
+
+  // Duplicar para fazer o fluxo de outro carro: abre a cópia para editar.
+  await page.goto("/fluxos");
+  await page
+    .getByTestId("fluxo")
+    .filter({ hasText: "Reaquecer cliente" })
+    .getByRole("button", { name: "Duplicar" })
+    .click();
+  await page.waitForURL(/\/fluxos\/[0-9a-f-]{36}$/);
+  await expect(page.getByLabel("Nome do fluxo")).toHaveValue("Reaquecer cliente (cópia)");
+  await expect(page.getByLabel("Mensagem do passo 1")).toHaveValue("Oi {nome}, tudo bem?");
+  await page.getByLabel("Nome do fluxo").fill("Apresentação Onix 2020");
+  await page.getByRole("button", { name: "Salvar fluxo" }).click();
+  await page.waitForURL(/\/fluxos$/);
+  await expect(page.getByTestId("fluxo").filter({ hasText: "Apresentação Onix 2020" })).toContainText(
+    "Desligado",
+  );
 });

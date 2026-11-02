@@ -3,6 +3,7 @@ import {
   type Database,
   memberships,
   notificationOutbox,
+  organizations,
   users,
   whatsappConnections,
 } from "@crm/db";
@@ -66,10 +67,20 @@ async function noticeByOtherConnection(db: Database, c: Conn, body: string) {
  * de todos, WhatsApp dos gestores por outro número) e limpa quando volta.
  */
 export async function monitorConnections(db: Database, evo: EvolutionApi) {
-  const conns = await db
-    .select()
-    .from(whatsappConnections)
-    .where(and(eq(whatsappConnections.active, true), isNotNull(whatsappConnections.connectedAt)));
+  // Empresa suspensa não é monitorada (ninguém usa, não faz sentido alarmar).
+  const conns = (
+    await db
+      .select({ c: whatsappConnections })
+      .from(whatsappConnections)
+      .innerJoin(organizations, eq(organizations.id, whatsappConnections.organizationId))
+      .where(
+        and(
+          eq(whatsappConnections.active, true),
+          isNotNull(whatsappConnections.connectedAt),
+          eq(organizations.status, "active"),
+        ),
+      )
+  ).map((r) => r.c);
   const out = { checked: conns.length, alerted: 0, recovered: 0 };
   for (const c of conns) {
     const now = new Date();

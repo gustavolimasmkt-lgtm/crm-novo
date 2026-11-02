@@ -123,6 +123,7 @@ npx playwright test
 - `processFlows` roda no timer de 20 s; mensagens usam `reserveAutomatedSend` (anti-bloqueio) e a janela do follow-up.
 - Mídia dos passos em `flow_media` (bytea, até 16 MB): `POST /api/fluxos/midia` e `GET /api/fluxos/midia/[id]`.
 - Execução manual (`trigger_key` `manual:`): `/api/fluxos/[id]/iniciar` chama `processFlows({ runId })` na hora; envia até 10 passos seguidos com 1,2 s entre eles, `automation = 'flow_manual'` (fora do limite diário).
+- Duplicar: `duplicateFlow` copia gatilho, passos (as mídias são referenciadas, não copiadas) e opções, sempre desligado.
 
 ## Lista do CRM e inatividade
 
@@ -137,7 +138,7 @@ npx playwright test
 
 ## Monitor do WhatsApp
 
-- `monitorConnections` (timer de 2 min) chama `connectionState` de cada conexão ativa que já conectou; guarda `down_since`, `down_alerted_at` e `check_failed_since`. Avisa uma vez por queda depois de 2 min (evento `connection_down`, aviso por outra conexão para admin/gestor).
+- `monitorConnections` (timer de 2 min) chama `connectionState` de cada conexão ativa que já conectou; guarda `down_since`, `down_alerted_at` e `check_failed_since`. Avisa uma vez por queda depois de 2 min (evento `connection_down`, aviso por outra conexão para admin/gestor). Empresas com status `suspended` ficam de fora.
 - `connectionAlerts` alimenta a faixa vermelha (`components/connection-banner.tsx`).
 - Tempo real no navegador: uma única conexão SSE por aba (`lib/live.ts`), compartilhada por faixa, avisos, quadro e conversas.
 - Backup: o plano Hobby do Railway não tem backup de volume; no Pro, ligar Daily/Weekly na aba Backups do Postgres.
@@ -149,3 +150,4 @@ npx playwright test
 - `#periodo-dia` (`fillDayPeriod` em `core/src/text.ts`) é trocado na hora do envio em `sendMessage` e `sendAiMessage`.
 - Agendadas: `updateScheduled` (PATCH `/api/agendadas/[id]`), lista por conversa em GET `/api/conversas/[id]/agendar`.
 - Conversas: filtro `etapa` (id da etapa ou `none`).
+- Menu (`components/shell.tsx`): itens com `primary` ficam fixos; os outros têm `group` e aparecem em categorias recolhíveis. Abertas ficam em `localStorage` (`crm.menu.abertos`); a da rota atual abre sozinha. E2E abre telas do menu por `e2e/menu.ts` (`openFromMenu`).

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { deleteFlowAction, setFlowActiveAction } from "@/app/actions/flows";
+import { deleteFlowAction, duplicateFlowAction, setFlowActiveAction } from "@/app/actions/flows";
 import { Badge, Button, Notice } from "@/components/ui";
 import { DispatchPanel } from "./dispatch";
 
@@ -25,6 +26,7 @@ export function FlowRow({
     stopped: number;
   };
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
@@ -64,6 +66,21 @@ export function FlowRow({
               Editar
             </Button>
           </Link>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                const r = await duplicateFlowAction(flow.id);
+                if (r.error) setError(r.error);
+                else if (r.id) router.push(`/fluxos/${r.id}`);
+              })
+            }
+          >
+            Duplicar
+          </Button>
           <Button
             size="sm"
             variant="plain"

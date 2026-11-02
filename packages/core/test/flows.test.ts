@@ -15,6 +15,7 @@ import {
   createEvolutionClient,
   createOrganization,
   dispatchFlow,
+  duplicateFlow,
   handleEvolutionWebhook,
   listContactRuns,
   listConversations,
@@ -348,6 +349,12 @@ describe("fluxos", () => {
       ],
     });
     await setFlowActive(db, admin, org.id, fid ?? "", true);
+    // Duplicar: mesma sequência (com as mídias), desligada, para virar o fluxo de outro carro.
+    const copyId = await duplicateFlow(db, admin, org.id, fid ?? "");
+    const copy = (await listFlows(db, org.id)).find((f) => f.id === copyId);
+    expect(copy).toMatchObject({ name: "Apresentação HR-V (cópia)", active: false, trigger: "manual" });
+    expect(copy?.steps).toHaveLength(3);
+    await expect(duplicateFlow(db, { ...admin, role: "seller" }, org.id, fid ?? "")).rejects.toThrow();
     const [c] = await listConversations(db, admin, org.id);
     fake.sent.length = 0;
     const runId = await startFlow(db, admin, org.id, fid ?? "", c?.id ?? "");

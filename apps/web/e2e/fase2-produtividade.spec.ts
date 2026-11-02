@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 /** Ação do campo de mensagem: no celular fica atrás do botão "+" (Mais opções). */
 async function composerAction(page: Page, name: string) {
@@ -54,8 +55,7 @@ test("produtividade: respostas rápidas, nota interna, áudio transcrito, tarefa
   await page.waitForURL((u) => u.pathname === "/");
 
   // Respostas rápidas pelo menu
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Respostas rápidas" }).first().click();
+  await openFromMenu(page, "Respostas rápidas");
   await page.getByLabel("Atalho").fill("/Endereço");
   await page.getByLabel(/^Mensagem/).fill("Oi {nome}! Estamos na Av. Centenário, 100.");
   await page.getByRole("button", { name: "Salvar" }).click();

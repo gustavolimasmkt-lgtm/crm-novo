@@ -1,6 +1,6 @@
 "use server";
 
-import { deleteFlow, saveFlow, setFlowActive } from "@crm/core";
+import { deleteFlow, duplicateFlow, saveFlow, setFlowActive } from "@crm/core";
 import { type FlowStep, getDb } from "@crm/db";
 import { revalidatePath } from "next/cache";
 import { type FormState, toFormError } from "@/lib/form";
@@ -36,6 +36,17 @@ export async function setFlowActiveAction(id: string, active: boolean) {
   }
   revalidatePath("/fluxos");
   return { ok: true };
+}
+
+export async function duplicateFlowAction(id: string): Promise<{ error?: string; id?: string }> {
+  const ctx = await requireOrg();
+  try {
+    const copy = await duplicateFlow(getDb(), ctx.actor, ctx.organization.id, id);
+    revalidatePath("/fluxos");
+    return { id: copy ?? undefined };
+  } catch (e) {
+    return toFormError(e);
+  }
 }
 
 export async function deleteFlowAction(id: string) {

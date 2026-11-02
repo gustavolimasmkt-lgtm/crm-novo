@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
@@ -66,8 +67,7 @@ test("agente de IA: importa, simula, liga, responde no WhatsApp, transfere e rel
   await page.getByRole("button", { name: "Concluir" }).click();
 
   // Abre a tela do agente pelo menu
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Agente de IA" }).first().click();
+  await openFromMenu(page, "Agente de IA");
   await expect(page.getByRole("heading", { name: "Agente de IA" })).toBeVisible();
 
   // Importa do sistema antigo

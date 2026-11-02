@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 test.use({
   permissions: ["microphone"],
@@ -173,8 +174,7 @@ test("mensagens: responder, editar, apagar, agendar, resumo da IA e campanha", a
 
   // Campanha (pelo menu, a partir do Início)
   await page.goto("/");
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Campanhas" }).first().click();
+  await openFromMenu(page, "Campanhas");
   await expect(page.getByText("Nenhuma campanha")).toBeVisible();
   await page.getByRole("button", { name: "Nova campanha" }).click();
   const dlg = page.getByRole("dialog", { name: "Nova campanha" });

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
@@ -30,7 +31,6 @@ test("catálogo, agenda e rodízio: cadastra, simula o agente, marca visita e co
   page,
 }, testInfo) => {
   const tag = `${run}-${testInfo.project.name}`;
-  const mobile = testInfo.project.name === "mobile";
   page.on("dialog", (d) => d.accept());
 
   await loginOk(page, MASTER.email, MASTER.password);
@@ -48,8 +48,7 @@ test("catálogo, agenda e rodízio: cadastra, simula o agente, marca visita e co
   await page.waitForURL((u) => u.pathname === "/");
 
   // Catálogo pelo menu
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Catálogo" }).first().click();
+  await openFromMenu(page, "Catálogo");
   await expect(page.getByRole("heading", { name: "Catálogo" })).toBeVisible();
   await expect(page.getByText("Catálogo vazio")).toBeVisible();
 

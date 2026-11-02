@@ -107,6 +107,10 @@ describe("monitor de conexões", () => {
     await monitorConnections(db, evo);
     expect(await connectionAlerts(db, org.id)).toEqual([]);
 
+    await db.update(organizations).set({ status: "suspended" }).where(eq(organizations.id, org.id));
+    expect(await monitorConnections(db, evo)).toMatchObject({ checked: 0 });
+    await db.update(organizations).set({ status: "active" }).where(eq(organizations.id, org.id));
+
     await disconnectConnection(db, evo, admin, org.id, loja.id);
     expect(await monitorConnections(db, evo)).toMatchObject({ checked: 0 });
     expect(await connectionAlerts(db, org.id)).toEqual([]);

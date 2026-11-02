@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openFromMenu } from "./menu";
 
 const MASTER = {
   email: process.env.E2E_MASTER_EMAIL ?? "master@local.test",
@@ -37,8 +38,7 @@ test("Meta: lead de anúncio, integração, teste de conexão e resultado por ca
   await page.waitForURL((u) => u.pathname === "/");
 
   // Integração pelo menu
-  if (mobile) await page.getByRole("button", { name: "Mais" }).click();
-  await page.getByRole("link", { name: "Integração Meta" }).first().click();
+  await openFromMenu(page, "Integração Meta");
   await page.getByLabel("API de Conversões ligada").check();
   await page.getByLabel("ID do conjunto de dados (pixel)").fill("777000111");
   await page.getByLabel("Token de acesso da API de Conversões").fill("token-capi");

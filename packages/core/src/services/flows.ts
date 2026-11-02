@@ -180,6 +180,27 @@ export async function setFlowActive(
       .where(and(eq(flowRuns.flowId, f.id), eq(flowRuns.status, "active")));
 }
 
+/** Copia o fluxo (passos, gatilho e mídias), desligado, para virar outro: ex. um por carro. */
+export async function duplicateFlow(db: Database, actor: ActorU, organizationId: string, id: string) {
+  requireManage(actor);
+  const f = await ownFlow(db, organizationId, id);
+  const [copy] = await db
+    .insert(flows)
+    .values({
+      organizationId,
+      name: `${f.name} (cópia)`.slice(0, 80),
+      trigger: f.trigger,
+      triggerStageId: f.triggerStageId,
+      triggerTagId: f.triggerTagId,
+      stopOnReply: f.stopOnReply,
+      steps: f.steps,
+      active: false,
+      createdByUserId: actor.userId,
+    })
+    .returning({ id: flows.id });
+  return copy?.id ?? null;
+}
+
 export async function deleteFlow(db: Database, actor: ActorU, organizationId: string, id: string) {
   requireManage(actor);
   const f = await ownFlow(db, organizationId, id);
