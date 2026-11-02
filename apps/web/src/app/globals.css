@@ -159,3 +159,8 @@ select {
 select[multiple] {
   background-image: none;
 }
+
+/* Teclado aberto no celular (lib/viewport.ts): sem a folga da barrinha do iPhone. */
+.kb-open .kb-tight {
+  padding-bottom: 0.5rem;
+}

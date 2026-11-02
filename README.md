@@ -150,6 +150,6 @@ npx playwright test
 - `#periodo-dia` (`fillDayPeriod` em `core/src/text.ts`) é trocado na hora do envio em `sendMessage` e `sendAiMessage`.
 - Agendadas: `updateScheduled` (PATCH `/api/agendadas/[id]`), lista por conversa em GET `/api/conversas/[id]/agendar`.
 - Conversas: filtro `etapa` (id da etapa ou `none`).
-- Teclado no celular: `lib/viewport.ts` (`useVisualViewport`) grava `--vvh`/`--vvt` com a área visível e trava a rolagem do fundo enquanto a conversa está aberta; `interactiveWidget: resizes-content` no viewport (Android).
+- Teclado no celular: `lib/viewport.ts` (`useVisualViewport`) grava `--vvh`/`--vvt` com a área visível e trava a rolagem do fundo enquanto a conversa está aberta; com teclado aberto põe `kb-open` no `<html>` (tira a folga da barrinha do iPhone via `.kb-tight`) e uma faixa sólida abaixo da conversa cobre o fundo atrás da barra translúcida do teclado do iOS; `interactiveWidget: resizes-content` no viewport (Android).
 - Campos de texto ficam com 16px abaixo de 768px (regra fora de camada em `globals.css`, vence as classes do Tailwind).
 - Menu (`components/shell.tsx`): itens com `primary` ficam fixos; os outros têm `group` e aparecem em categorias recolhíveis. Abertas ficam em `localStorage` (`crm.menu.abertos`); a da rota atual abre sozinha. E2E abre telas do menu por `e2e/menu.ts` (`openFromMenu`).

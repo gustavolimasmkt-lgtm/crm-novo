@@ -479,7 +479,7 @@ export function Inbox({
             className={cx(
               "min-w-0 flex-1 flex-col bg-bg md:flex md:bg-surface",
               selected
-                ? "fixed inset-x-0 top-[var(--vvt,0px)] z-40 flex h-[var(--vvh,100dvh)] md:static md:z-auto md:h-auto"
+                ? "fixed inset-x-0 top-[var(--vvt,0px)] z-40 flex h-[var(--vvh,100dvh)] after:absolute after:inset-x-0 after:top-full after:h-[60vh] after:bg-surface md:static md:z-auto md:h-auto md:after:hidden"
                 : "hidden",
             )}
             aria-label="Conversa"
@@ -1381,7 +1381,7 @@ function Composer({
     <form
       onSubmit={submit}
       className={cx(
-        "material relative border-t border-separator px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 md:px-5",
+        "material kb-tight relative border-t border-separator px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 md:px-5",
         note && "bg-warn-soft/60",
       )}
     >

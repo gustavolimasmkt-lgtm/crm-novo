@@ -15,6 +15,8 @@ export function useVisualViewport(active: boolean) {
     const set = () => {
       root.style.setProperty("--vvh", `${Math.round(vv.height)}px`);
       root.style.setProperty("--vvt", `${Math.round(vv.offsetTop)}px`);
+      // Teclado aberto: tira a folga da barrinha do iPhone embaixo da caixa de mensagem.
+      root.classList.toggle("kb-open", window.innerHeight - vv.height > 120);
     };
     set();
     vv.addEventListener("resize", set);
@@ -26,6 +28,7 @@ export function useVisualViewport(active: boolean) {
       vv.removeEventListener("scroll", set);
       root.style.removeProperty("--vvh");
       root.style.removeProperty("--vvt");
+      root.classList.remove("kb-open");
       document.body.style.overflow = prev;
     };
   }, [active]);
