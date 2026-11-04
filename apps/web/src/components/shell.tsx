@@ -25,7 +25,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { logoutAction, switchOrgAction } from "@/app/actions/auth";
@@ -126,8 +126,9 @@ export function Shell({
         isActive(n.href) ? "bg-accent text-white" : "text-ink hover:bg-fill",
       )}
     >
-      {n.icon}
-      {n.label}
+      <NavIcon icon={n.icon} />
+      <span className="flex-1">{n.label}</span>
+      <PendingSpinner />
     </Link>
   );
 
@@ -203,7 +204,7 @@ export function Shell({
                 isActive(n.href) ? "text-accent" : "text-ink-3",
               )}
             >
-              {n.icon}
+              <NavIcon icon={n.icon} />
               {n.label}
             </Link>
           ))}
@@ -304,5 +305,22 @@ function OrgSwitcher({ org, orgs, compact }: { org: Org; orgs: Org[]; compact?: 
         </div>
       )}
     </div>
+  );
+}
+
+/** Ícone do menu: pulsa enquanto a tela clicada carrega (resposta na hora ao toque). */
+function NavIcon({ icon }: { icon: ReactNode }) {
+  const { pending } = useLinkStatus();
+  return <span className={cx("inline-flex", pending && "animate-pulse opacity-60")}>{icon}</span>;
+}
+
+function PendingSpinner() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span
+      aria-hidden
+      className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70"
+    />
   );
 }

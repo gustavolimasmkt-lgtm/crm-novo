@@ -71,3 +71,5 @@ Itens extras da Fase 0 (infraestrutura): monorepo, CI (lint, tipos, testes, buil
 Menu: Início, Conversas, CRM e Contatos fixos; o resto em categorias que abrem e fecham (Dia a dia, Vendas, Automação, Anúncios, Configurações), lembradas por navegador, com a categoria da tela atual sempre aberta. No celular, a aba Mais mostra as mesmas categorias.
 
 Celular: campos com 16px (iPhone não dá zoom ao digitar); conversa acompanha o teclado (área visível real) e mantém a última mensagem à vista; qualificação e resumo da IA numa faixa só; CRM com botões em ícone, filtros em linha que desliza, quadro de uma etapa por vez com atalhos de etapa fixos no topo; lista do CRM em cartões; negociação com Etapa e Responsável no topo e cabeçalho fixo; seta nas caixas de escolha; botões pequenos maiores no toque. E2E.
+
+Velocidade: fotos, áudios e figurinhas baixados em segundo plano quando chegam; conversa já aberta reabre na hora (cache) e começa a carregar ao tocar; lista inicial sem busca dupla. Integração + E2E.

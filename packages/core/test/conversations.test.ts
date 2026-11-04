@@ -15,6 +15,7 @@ import {
   markConversationRead,
   normalizePhoneInput,
   parseMessage,
+  prefetchRecentMedia,
   processPendingEvents,
   refreshConnection,
   retryMessage,
@@ -237,6 +238,24 @@ describe("recebimento", () => {
     expect(media.data.length).toBeGreaterThan(10);
     await getMessageMedia(db, evo, admin, org.id, m?.id ?? "");
     expect(fake.calls.filter((x) => x.path.includes("getBase64")).length).toBe(before + 1);
+  });
+
+  it("baixa fotos recebidas em segundo plano, uma vez só", async () => {
+    const { org, admin, hook } = await setup();
+    await hook("messages.upsert", {
+      key: { id: "IMG2", remoteJid: "5548999990005@s.whatsapp.net", fromMe: false },
+      message: { imageMessage: { mimetype: "image/jpeg" } },
+      messageTimestamp: Math.floor(Date.now() / 1000),
+    });
+    await hook("messages.upsert", incoming("TXT2", "5548999990005", "e esse?"));
+    expect(await prefetchRecentMedia(db, evo)).toBe(1);
+    expect(await prefetchRecentMedia(db, evo)).toBe(0);
+    const before = fake.calls.filter((x) => x.path.includes("getBase64")).length;
+    const [c] = await listConversations(db, admin, org.id);
+    const img = (await listMessages(db, admin, org.id, c?.id ?? "")).find((m) => m.type === "image");
+    await getMessageMedia(db, evo, admin, org.id, img?.id ?? "");
+    // Já estava guardada: abrir não vai na Evolution.
+    expect(fake.calls.filter((x) => x.path.includes("getBase64")).length).toBe(before);
   });
 });
 

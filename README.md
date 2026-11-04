@@ -131,6 +131,13 @@ npx playwright test
 - "Parada há" = `lastActivitySql`: maior entre a mudança de etapa e a última mensagem recebida do cliente.
 - Regras de inatividade (`inactivity_rules`): `processInactivity` no timer de 5 min, até 50 movimentos por regra por rodada, via `moveDealSystem` (evento `stage` com `via`, que dispara fluxos de etapa).
 
+## Velocidade das conversas
+
+- `prefetchRecentMedia` (timer de 15 s): baixa da Evolution fotos, áudios e figurinhas dos últimos 2 dias que ainda não estão em `message_media` (até 6 por rodada; desiste depois de 3 falhas). Abrir a conversa não depende mais da Evolution.
+- Navegador: conversas abertas ficam em cache (`threadCache`); reabrir mostra na hora e atualiza por trás. Passar o mouse ou tocar na conversa já começa a busca, e o clique aproveita.
+- A primeira lista vem pronta do servidor (sem buscar de novo ao abrir a tela). `GET /api/conversas/[id]` faz as consultas em paralelo.
+- Menu: ícone pulsa enquanto a tela clicada carrega (`useLinkStatus`). Não usar `loading.tsx` no grupo `(app)`: trava a troca de filtro por URL no Início.
+
 ## Senha e avisos no navegador
 
 - Esqueci minha senha (`services/password.ts`): link por WhatsApp (`users.phone`) usando uma conexão aberta de uma empresa da pessoa; tabela `password_resets` guarda só o hash. Páginas `/esqueci-senha` e `/redefinir-senha?t=`.

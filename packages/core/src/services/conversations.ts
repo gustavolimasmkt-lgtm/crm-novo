@@ -11,7 +11,21 @@ import {
   users,
   whatsappConnections,
 } from "@crm/db";
-import { and, desc, eq, ilike, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import type { Transcriber } from "../ai/transcribe.js";
 import { type Actor, can } from "../auth/permissions.js";
@@ -570,6 +584,48 @@ async function loadMessageMedia(db: Database, evo: EvolutionApi, msg: typeof mes
     await db.insert(messageMedia).values({ messageId: msg.id, mime, fileName, data }).onConflictDoNothing();
   }
   return { mime, fileName, data };
+}
+
+const prefetchFailures = new Map<string, number>();
+
+/**
+ * Timer: baixa da Evolution, em segundo plano, fotos, áudios e figurinhas dos últimos 2 dias que
+ * ainda não estão guardados. Assim a conversa abre com a mídia na hora (antes só baixava quando
+ * alguém abria, e a Evolution às vezes leva segundos). Desiste de uma mídia depois de 3 falhas.
+ */
+export async function prefetchRecentMedia(db: Database, evo: EvolutionApi, limit = 6) {
+  const failed = [...prefetchFailures].filter(([, n]) => n >= 3).map(([id]) => id);
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        inArray(messages.type, ["image", "audio", "sticker"]),
+        isNotNull(messages.raw),
+        isNull(messages.deletedAt),
+        gt(messages.createdAt, new Date(Date.now() - 2 * 86_400_000)),
+        sql`not exists (select 1 from message_media mm where mm.message_id = ${messages.id})`,
+        failed.length ? notInArray(messages.id, failed) : undefined,
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(limit);
+  let saved = 0;
+  for (const m of rows) {
+    try {
+      const got = await loadMessageMedia(db, evo, m);
+      // Grande demais para guardar: não tenta de novo a cada rodada.
+      if (got.data.length > MAX_MEDIA_BYTES) prefetchFailures.set(m.id, 3);
+      else {
+        prefetchFailures.delete(m.id);
+        saved++;
+      }
+    } catch {
+      prefetchFailures.set(m.id, (prefetchFailures.get(m.id) ?? 0) + 1);
+      if (prefetchFailures.size > 500) prefetchFailures.delete(prefetchFailures.keys().next().value ?? "");
+    }
+  }
+  return saved;
 }
 
 export const startInput = z.object({

@@ -253,9 +253,25 @@ export function Inbox({
     }
   }, [filter, q, stageId]);
 
-  const loadThread = useCallback(async (id: string) => {
+  // Conversas já abertas ficam guardadas: reabrir mostra na hora e atualiza por trás.
+  const threadCache = useRef(new Map<string, ThreadData>());
+  // Ao passar o dedo/mouse na conversa já começa a buscar; o clique aproveita essa busca.
+  const prefetching = useRef(new Map<string, Promise<ThreadData>>());
+  const prefetchThread = useCallback((id: string) => {
+    if (threadCache.current.has(id) || prefetching.current.has(id)) return;
+    const p = api<ThreadData>(`/api/conversas/${id}`);
+    prefetching.current.set(id, p);
+    p.then((t) => {
+      if (!threadCache.current.has(id)) threadCache.current.set(id, t);
+    })
+      .catch(() => {})
+      .finally(() => prefetching.current.delete(id));
+  }, []);
+  const loadThread = useCallback(async (id: string, reusePrefetch = false) => {
     try {
-      const t = await api<ThreadData>(`/api/conversas/${id}`);
+      const pending = reusePrefetch ? prefetching.current.get(id) : undefined;
+      const t = await (pending ?? api<ThreadData>(`/api/conversas/${id}`));
+      threadCache.current.set(id, t);
       if (selectedRef.current !== id) return;
       setThread(t);
       setThreadError(null);
@@ -267,8 +283,13 @@ export function Inbox({
     }
   }, []);
 
-  // Lista: recarrega ao trocar filtro/busca.
+  // Lista: recarrega ao trocar filtro/busca (a primeira já veio pronta do servidor).
+  const firstList = useRef(true);
   useEffect(() => {
+    if (firstList.current) {
+      firstList.current = false;
+      return;
+    }
     const t = setTimeout(loadList, q ? 250 : 0);
     return () => clearTimeout(t);
   }, [loadList, q]);
@@ -279,9 +300,9 @@ export function Inbox({
     if (selected) url.searchParams.set("c", selected);
     else url.searchParams.delete("c");
     window.history.replaceState(null, "", url);
-    setThread(null);
+    setThread(selected ? (threadCache.current.get(selected) ?? null) : null);
     setThreadError(null);
-    if (selected) loadThread(selected);
+    if (selected) loadThread(selected, true);
   }, [selected, loadThread]);
 
   // Tempo real.
@@ -426,6 +447,8 @@ export function Inbox({
                     type="button"
                     data-testid="conversation-item"
                     onClick={() => setSelected(c.id)}
+                    onPointerEnter={() => prefetchThread(c.id)}
+                    onPointerDown={() => prefetchThread(c.id)}
                     className={cx(
                       "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
                       selected === c.id ? "bg-accent-soft" : "hover:bg-fill",

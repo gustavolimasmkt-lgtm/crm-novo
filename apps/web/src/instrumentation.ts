@@ -7,7 +7,8 @@
  * - envia os avisos de WhatsApp para a equipe (a cada 5 s);
  * - lembra os clientes das visitas, avisa tarefas, envia mensagens agendadas, campanhas e fluxos (a cada 20 s);
  * - follow-up: a IA retoma clientes que pararam de responder (a cada 20 s, respeitando o anti-bloqueio);
- * - envia as respostas agendadas do agente de IA (a cada 3 s).
+ * - envia as respostas agendadas do agente de IA (a cada 3 s);
+ * - baixa em segundo plano fotos, áudios e figurinhas recebidos (a cada 15 s).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs" || !process.env.DATABASE_URL) return;
@@ -54,6 +55,19 @@ export async function register() {
   const { EVOLUTION_API_URL: evoUrl, EVOLUTION_API_KEY: evoKey } = process.env;
   if (evoUrl && evoKey) {
     const evo = core.createEvolutionClient({ baseUrl: evoUrl, apiKey: evoKey });
+    // Fotos, áudios e figurinhas recebidos: baixa em segundo plano para a conversa abrir na hora.
+    let prefetching = false;
+    setInterval(async () => {
+      if (prefetching) return;
+      prefetching = true;
+      try {
+        await core.prefetchRecentMedia(getDb(), evo);
+      } catch (e) {
+        console.error("[mídia]", e);
+      } finally {
+        prefetching = false;
+      }
+    }, 15_000).unref?.();
     let sending = false;
     setInterval(async () => {
       if (sending) return;
