@@ -4,8 +4,10 @@ import {
   ArrowDown,
   ArrowUp,
   Bell,
+  ChevronLeft,
   Clock,
   Film,
+  ImagePlus,
   ListTodo,
   MessageSquare,
   Mic,
@@ -13,6 +15,7 @@ import {
   Square,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -31,6 +34,7 @@ type Step =
       kind: "image" | "video" | "audio" | "document";
       fileName: string;
       caption: string;
+      extra?: { mediaId: string; fileName: string }[];
     };
 type Trigger = "manual" | "lead_created" | "stage_entered" | "tag_added";
 type Flow = {
@@ -49,7 +53,7 @@ const STEP_INFO: Record<Step["type"], { label: string; icon: React.ReactNode }> 
   move_stage: { label: "Mover etapa", icon: <MoveRight size={16} /> },
   task: { label: "Criar tarefa", icon: <ListTodo size={16} /> },
   notify: { label: "Avisar responsável", icon: <Bell size={16} /> },
-  media: { label: "Foto, vídeo ou áudio", icon: <Film size={16} /> },
+  media: { label: "Fotos, vídeo ou áudio", icon: <Film size={16} /> },
 };
 const UNITS = [
   { id: "min", label: "minutos", mult: 1 },
@@ -146,7 +150,7 @@ export function FlowEditor({
               : type === "task"
                 ? { type, title: "", dueMinutes: 0 }
                 : type === "media"
-                  ? { type, mediaId: "", kind: "image" as const, fileName: "", caption: "" }
+                  ? { type, mediaId: "", kind: "image" as const, fileName: "", caption: "", extra: [] }
                   : { type, text: "" },
       ],
     }));
@@ -375,8 +379,12 @@ export function FlowEditor({
 }
 
 type MediaStepData = Extract<Step, { type: "media" }>;
+const MAX_PHOTOS = 10;
 
-/** Passo de mídia: enviar arquivo (foto, vídeo, áudio, PDF) ou gravar áudio na hora. */
+/**
+ * Passo de mídia: foto(s), vídeo, áudio ou PDF, ou áudio gravado na hora.
+ * Foto aceita até 10 no mesmo passo (saem em seguida, na ordem; a legenda vai na primeira).
+ */
 function MediaStep({
   step,
   index,
@@ -388,25 +396,62 @@ function MediaStep({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const photos =
+    step.kind === "image" && step.mediaId
+      ? [{ mediaId: step.mediaId, fileName: step.fileName }, ...(step.extra ?? [])]
+      : [];
 
-  async function upload(file: File) {
+  async function send(file: File) {
+    const fd = new FormData();
+    fd.set("file", file);
+    const r = await fetch("/api/fluxos/midia", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? "Não consegui enviar o arquivo.");
+    return j as { id: string; kind: MediaStepData["kind"]; fileName: string };
+  }
+
+  /** Um arquivo troca o passo; várias fotos (ou fotos a mais) entram em sequência. */
+  async function upload(files: File[]) {
     setError(null);
-    setBusy(true);
+    if (!files.length) return;
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    const adding = photos.length > 0 && images.length === files.length;
     try {
-      const fd = new FormData();
-      fd.set("file", file);
-      const r = await fetch("/api/fluxos/midia", { method: "POST", body: fd });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Não consegui enviar o arquivo.");
-      onChange({ ...step, mediaId: j.id, kind: j.kind, fileName: j.fileName });
+      if (!adding && (files.length === 1 || images.length !== files.length)) {
+        if (files.length > 1) setError("Várias de uma vez só para fotos. Usei o primeiro arquivo.");
+        setBusy("Enviando...");
+        const j = await send(files[0] as File);
+        onChange({ ...step, mediaId: j.id, kind: j.kind, fileName: j.fileName, extra: [] });
+        return;
+      }
+      const room = MAX_PHOTOS - photos.length;
+      if (images.length > room)
+        setError(`No máximo ${MAX_PHOTOS} fotos por passo. Usei as ${room} primeiras.`);
+      const take = images.slice(0, Math.max(room, 0));
+      const got: { mediaId: string; fileName: string }[] = [];
+      for (const [i, f] of take.entries()) {
+        setBusy(`Enviando foto ${i + 1} de ${take.length}...`);
+        const j = await send(f);
+        got.push({ mediaId: j.id, fileName: j.fileName });
+      }
+      const all = [...photos, ...got];
+      const [first, ...rest] = all;
+      if (first)
+        onChange({ ...step, kind: "image", mediaId: first.mediaId, fileName: first.fileName, extra: rest });
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+  }
+
+  function setPhotos(all: { mediaId: string; fileName: string }[]) {
+    const [first, ...rest] = all;
+    if (first) onChange({ ...step, mediaId: first.mediaId, fileName: first.fileName, extra: rest });
+    else onChange({ ...step, mediaId: "", fileName: "", extra: [] });
   }
 
   async function record() {
@@ -428,7 +473,7 @@ function MediaStep({
         setRecording(false);
         const mime = (rec.mimeType || "audio/webm").split(";")[0] ?? "audio/webm";
         const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "webm";
-        upload(new File(chunks, `audio-gravado.${ext}`, { type: mime }));
+        upload([new File(chunks, `audio-gravado.${ext}`, { type: mime })]);
       };
       recRef.current = rec;
       rec.start();
@@ -439,14 +484,54 @@ function MediaStep({
   }
 
   const src = step.mediaId ? `/api/fluxos/midia/${step.mediaId}` : null;
+  const isPhotos = photos.length > 0;
   return (
     <div className="space-y-3">
-      {src && (
+      {isPhotos && (
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5" data-testid={`fotos-passo-${index + 1}`}>
+          {photos.map((ph, i) => (
+            <li key={ph.mediaId} className="relative overflow-hidden rounded-xl bg-fill">
+              {/* biome-ignore lint/performance/noImgElement: arquivo privado servido pela API */}
+              <img
+                src={`/api/fluxos/midia/${ph.mediaId}`}
+                alt={ph.fileName}
+                className="aspect-square w-full object-cover"
+              />
+              <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 text-[11px] font-semibold text-white">
+                {i + 1}
+              </span>
+              <div className="absolute right-1 top-1 flex gap-1">
+                {i > 0 && (
+                  <button
+                    type="button"
+                    aria-label={`Passar a foto ${i + 1} para antes`}
+                    title="Passar para antes"
+                    className="flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+                    onClick={() => {
+                      const all = [...photos];
+                      [all[i - 1], all[i]] = [all[i] as (typeof all)[0], all[i - 1] as (typeof all)[0]];
+                      setPhotos(all);
+                    }}
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label={`Tirar a foto ${i + 1}`}
+                  title="Tirar"
+                  className="flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+                  onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {src && !isPhotos && (
         <div className="rounded-xl bg-fill p-2">
-          {step.kind === "image" && (
-            // biome-ignore lint/performance/noImgElement: arquivo privado servido pela API
-            <img src={src} alt={step.fileName} className="max-h-48 rounded-lg" />
-          )}
           {step.kind === "video" && (
             // biome-ignore lint/a11y/useMediaCaption: vídeo do carro enviado pela equipe
             <video src={src} controls preload="metadata" className="max-h-56 rounded-lg" />
@@ -460,52 +545,79 @@ function MediaStep({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={busy || recording}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload size={14} /> {src ? "Trocar arquivo" : "Enviar foto, vídeo, áudio ou PDF"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={recording ? "danger" : "secondary"}
-          disabled={busy}
-          onClick={record}
-        >
-          {recording ? (
-            <>
-              <Square size={14} /> Parar gravação
-            </>
-          ) : (
-            <>
-              <Mic size={14} /> Gravar áudio
-            </>
-          )}
-        </Button>
-        {busy && <span className="self-center text-[13px] text-ink-2">Enviando...</span>}
+        {isPhotos ? (
+          photos.length < MAX_PHOTOS && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={!!busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImagePlus size={14} /> Adicionar fotos ({photos.length}/{MAX_PHOTOS})
+            </Button>
+          )
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={!!busy || recording}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload size={14} /> {src ? "Trocar arquivo" : "Enviar fotos, vídeo, áudio ou PDF"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={recording ? "danger" : "secondary"}
+              disabled={!!busy}
+              onClick={record}
+            >
+              {recording ? (
+                <>
+                  <Square size={14} /> Parar gravação
+                </>
+              ) : (
+                <>
+                  <Mic size={14} /> Gravar áudio
+                </>
+              )}
+            </Button>
+          </>
+        )}
+        {busy && <span className="self-center text-[13px] text-ink-2">{busy}</span>}
       </div>
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,video/*,audio/*,application/pdf"
+        multiple
+        accept={isPhotos ? "image/*" : "image/*,video/*,audio/*,application/pdf"}
         className="hidden"
         data-testid={`midia-passo-${index + 1}`}
         onChange={(e) => {
-          const f = e.target.files?.[0];
+          const fs = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (f) upload(f);
+          upload(fs);
         }}
       />
+      {isPhotos && photos.length === 1 && (
+        <p className="text-[12px] text-ink-3">
+          Dá para colocar até {MAX_PHOTOS} fotos neste passo: escolha várias de uma vez ou use Adicionar
+          fotos.
+        </p>
+      )}
       {step.kind !== "audio" && src && (
         <Input
           value={step.caption}
           maxLength={1000}
           aria-label={`Legenda do passo ${index + 1}`}
-          placeholder="Legenda (opcional), ex.: {nome}, olha ele por dentro"
+          placeholder={
+            photos.length > 1
+              ? "Legenda (vai na primeira foto), ex.: {nome}, olha ele"
+              : "Legenda (opcional), ex.: {nome}, olha ele por dentro"
+          }
           onChange={(e) => onChange({ ...step, caption: e.target.value })}
         />
       )}

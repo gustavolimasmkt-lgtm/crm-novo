@@ -63,11 +63,20 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await page.getByLabel("Nome do fluxo").fill("Reaquecer cliente");
   await page.getByLabel("Começa quando").selectOption("manual");
   await page.getByLabel("Mensagem do passo 1").fill("Oi {nome}, tudo bem?");
-  await page.getByRole("button", { name: "+ Foto, vídeo ou áudio" }).click();
-  await page
-    .getByTestId("midia-passo-2")
-    .setInputFiles({ name: "hrv.png", mimeType: "image/png", buffer: PNG });
-  await expect(page.getByText("hrv.png")).toBeVisible();
+  await page.getByRole("button", { name: "+ Fotos, vídeo ou áudio" }).click();
+  // Várias fotos no mesmo passo: escolhe 3 de uma vez, tira uma e troca a ordem.
+  await page.getByTestId("midia-passo-2").setInputFiles([
+    { name: "hrv-frente.png", mimeType: "image/png", buffer: PNG },
+    { name: "hrv-lado.png", mimeType: "image/png", buffer: PNG },
+    { name: "hrv-dentro.png", mimeType: "image/png", buffer: PNG },
+  ]);
+  const fotos = page.getByTestId("fotos-passo-2").getByRole("listitem");
+  await expect(fotos).toHaveCount(3);
+  await page.getByRole("button", { name: "Tirar a foto 2" }).click();
+  await expect(fotos).toHaveCount(2);
+  await page.getByRole("button", { name: "Passar a foto 2 para antes" }).click();
+  await expect(fotos.first().getByRole("img")).toHaveAttribute("alt", "hrv-dentro.png");
+  await expect(page.getByRole("button", { name: "Adicionar fotos (2/10)" })).toBeVisible();
   await page.getByLabel("Legenda do passo 2").fill("Olha ele, {nome}");
   await page.getByRole("button", { name: "+ Esperar" }).click();
   await page.getByLabel("Espera do passo 3", { exact: true }).fill("2");
@@ -111,6 +120,8 @@ test("fluxos: cria, liga, inicia na conversa, aparece em Agendadas e para", asyn
   await expect(thread.getByText("Oi Cliente, tudo bem?")).toBeVisible({ timeout: 15_000 });
   await expect(thread.getByText("Olha ele, Cliente")).toBeVisible({ timeout: 15_000 });
   await expect(thread.getByTestId("message").filter({ hasText: "Olha ele, Cliente" })).toContainText("Fluxo");
+  // As 2 fotos do passo saíram (a legenda só na primeira).
+  await expect(thread.locator('img[src*="/midia"]')).toHaveCount(2, { timeout: 15_000 });
   await expect(page.getByTestId("fluxos-ativos")).toContainText("Reaquecer cliente");
   await expect(page.getByTestId("fluxos-ativos")).toContainText("passo 4 de 5");
   await expect(page.getByTestId("ai-bar")).toHaveCount(0);

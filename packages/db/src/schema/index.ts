@@ -993,6 +993,8 @@ export type FlowStep =
       kind: "image" | "video" | "audio" | "document";
       fileName: string;
       caption: string;
+      /** Fotos a mais no mesmo passo (só para foto), enviadas em seguida, na ordem. */
+      extra?: { mediaId: string; fileName: string }[];
     };
 /** Move sozinho a negociação parada há X dias (sem mensagem do cliente nem mudança de etapa). */
 export const inactivityRules = pgTable(

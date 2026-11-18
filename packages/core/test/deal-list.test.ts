@@ -84,7 +84,8 @@ describe("lista do CRM", () => {
     expect(idle.rows.map((r) => r.id)).toEqual([ids[1]]);
     expect(idle.rows[0]?.idleDays).toBe(10);
 
-    const today = new Date().toISOString().slice(0, 10);
+    // "Hoje" no horário de Brasília (o filtro usa o dia de lá, não o UTC).
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     expect((await listDeals(db, admin, org.id, { createdFrom: today })).total).toBe(54);
     await expect(listDeals(db, admin, org.id, { createdFrom: "ontem" })).rejects.toThrow();
   });

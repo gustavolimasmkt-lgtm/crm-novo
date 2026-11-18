@@ -15,6 +15,7 @@ import {
   createEvolutionClient,
   createOrganization,
   dispatchFlow,
+  describeStep,
   duplicateFlow,
   handleEvolutionWebhook,
   listContactRuns,
@@ -374,5 +375,67 @@ describe("fluxos", () => {
         dailyLimit: 1,
       }),
     ).toBe(true);
+  });
+
+  it("várias fotos no mesmo passo: saem em seguida, na ordem, legenda só na primeira", async () => {
+    const { org, admin, say } = await setup();
+    await say("tem fotos do Onix?");
+    const foto = (n: string) =>
+      uploadFlowMedia(db, admin, org.id, { name: n, mime: "image/jpeg", data: Buffer.from(n) });
+    const [a, b, c3] = [await foto("frente.jpg"), await foto("lado.jpg"), await foto("dentro.jpg")];
+    // Só foto aceita várias no mesmo passo.
+    const audio = await uploadFlowMedia(db, admin, org.id, {
+      name: "a.ogg",
+      mime: "audio/ogg",
+      data: Buffer.from("a"),
+    });
+    await expect(
+      saveFlow(db, admin, org.id, null, {
+        name: "Errado",
+        trigger: "manual",
+        steps: [
+          {
+            type: "media",
+            mediaId: audio.id,
+            kind: "audio",
+            fileName: "a.ogg",
+            caption: "",
+            extra: [{ mediaId: b.id, fileName: "lado.jpg" }],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/só funciona com fotos/);
+    const fid = await saveFlow(db, admin, org.id, null, {
+      name: "Fotos Onix",
+      trigger: "manual",
+      steps: [
+        {
+          type: "media",
+          mediaId: a.id,
+          kind: "image",
+          fileName: "frente.jpg",
+          caption: "{nome}, olha ele",
+          extra: [
+            { mediaId: b.id, fileName: "lado.jpg" },
+            { mediaId: c3.id, fileName: "dentro.jpg" },
+          ],
+        },
+      ],
+    });
+    const flow = (await listFlows(db, org.id)).find((f) => f.id === fid);
+    expect(describeStep(flow?.steps[0])).toBe("3 fotos");
+    await setFlowActive(db, admin, org.id, fid ?? "", true);
+    const [c] = await listConversations(db, admin, org.id);
+    fake.sent.length = 0;
+    const runId = await startFlow(db, admin, org.id, fid ?? "", c?.id ?? "");
+    expect((await processFlows(db, evo, { runId })).map((r) => r.result)).toEqual(["done"]);
+    expect(fake.sent.map((x) => x.kind)).toEqual(["sendMedia", "sendMedia", "sendMedia"]);
+    expect(fake.sent.map((x) => (x.body as { fileName?: string }).fileName)).toEqual([
+      "frente.jpg",
+      "lado.jpg",
+      "dentro.jpg",
+    ]);
+    expect(fake.sent[0]?.body).toMatchObject({ mediatype: "image", caption: "Joana, olha ele" });
+    expect((fake.sent[1]?.body as { caption?: string }).caption ?? "").toBe("");
   });
 });

@@ -29,6 +29,10 @@ import { conversationLink, notifyUser } from "./rotation.js";
 type ActorU = Actor & { userId: string };
 const uuid = /^[0-9a-f-]{36}$/i;
 const MAX_WAIT_MIN = 60 * 24 * 60; // 60 dias
+/** Fotos por passo (a primeira mais as extras). */
+export const MAX_STEP_PHOTOS = 10;
+/** Intervalo entre as fotos do mesmo passo. */
+const PHOTO_GAP_MS = 1200;
 
 function requireManage(actor: Actor) {
   if (!can(actor, "settings.manage"))
@@ -64,6 +68,10 @@ const stepSchema = z.discriminatedUnion("type", [
     kind: z.enum(["image", "video", "audio", "document"]),
     fileName: z.string().max(200).default("arquivo"),
     caption: z.string().max(1000).default(""),
+    extra: z
+      .array(z.object({ mediaId: z.string().uuid(), fileName: z.string().max(200).default("foto") }))
+      .max(MAX_STEP_PHOTOS - 1, `No máximo ${MAX_STEP_PHOTOS} fotos por passo.`)
+      .default([]),
   }),
 ]);
 
@@ -94,7 +102,11 @@ async function validateRefs(db: Database, organizationId: string, input: z.infer
       .where(and(eq(pipelineStages.organizationId, organizationId), inArray(pipelineStages.id, stageIds)));
     if (found.length !== new Set(stageIds).size) throw new AppError("validation", "Etapa inválida.");
   }
-  const mediaIds = input.steps.flatMap((s) => (s.type === "media" ? [s.mediaId] : []));
+  if (input.steps.some((s) => s.type === "media" && s.kind !== "image" && s.extra.length))
+    throw new AppError("validation", "Várias fotos no mesmo passo: só funciona com fotos.");
+  const mediaIds = input.steps.flatMap((s) =>
+    s.type === "media" ? [s.mediaId, ...s.extra.map((x) => x.mediaId)] : [],
+  );
   if (mediaIds.length) {
     const found = await db
       .select({ id: flowMedia.id })
@@ -380,8 +392,11 @@ export function describeStep(s: FlowStep | undefined) {
       return `tarefa: ${s.title}`;
     case "notify":
       return "avisar responsável";
-    case "media":
+    case "media": {
+      const n = 1 + (s.extra?.length ?? 0);
+      if (s.kind === "image" && n > 1) return `${n} fotos`;
       return { image: "foto", video: "vídeo", audio: "áudio", document: "documento" }[s.kind];
+    }
   }
 }
 
@@ -559,22 +574,27 @@ export async function processFlows(
               byUserId: by,
             });
           } else {
-            const file = await db.query.flowMedia.findFirst({
-              where: and(eq(flowMedia.id, s.mediaId), eq(flowMedia.organizationId, run.organizationId)),
-            });
-            if (!file) throw new Error("arquivo do passo foi apagado");
-            await sendAiMessage(
-              db,
-              evo,
-              run.organizationId,
-              convId,
-              s.kind === "audio" ? "" : fillText(s.caption, contact),
-              {
-                automation,
-                byUserId: by,
-                media: { name: file.fileName, mime: file.mime, data: Buffer.from(file.data) },
-              },
-            );
+            // Várias fotos no passo: saem em seguida, na ordem; a legenda vai na primeira.
+            const ids = [s.mediaId, ...(s.extra ?? []).map((x) => x.mediaId)];
+            for (const [i, mediaId] of ids.entries()) {
+              const file = await db.query.flowMedia.findFirst({
+                where: and(eq(flowMedia.id, mediaId), eq(flowMedia.organizationId, run.organizationId)),
+              });
+              if (!file) throw new Error("arquivo do passo foi apagado");
+              if (i > 0) await new Promise((r) => setTimeout(r, PHOTO_GAP_MS));
+              await sendAiMessage(
+                db,
+                evo,
+                run.organizationId,
+                convId,
+                s.kind === "audio" || i > 0 ? "" : fillText(s.caption, contact),
+                {
+                  automation,
+                  byUserId: by,
+                  media: { name: file.fileName, mime: file.mime, data: Buffer.from(file.data) },
+                },
+              );
+            }
           }
           sent++;
           step++;
